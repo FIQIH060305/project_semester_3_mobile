@@ -4,10 +4,11 @@ import 'core/app_colors.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/jadwal/jadwal_screen.dart';
 import 'screens/placeholder_screen.dart';
+import 'screens/notifikasi/notifikasi_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('id_ID', null); // supaya nama hari/bulan berbahasa Indonesia
+  await initializeDateFormatting('id_ID', null);
   runApp(const GerakApp());
 }
 
@@ -28,9 +29,15 @@ class GerakApp extends StatelessWidget {
       routes: {
         '/dashboard': (_) => const DashboardScreen(),
         '/jadwal': (_) => const JadwalScreen(),
-        '/progres': (_) => const PlaceholderScreen(judul: 'Progres', navIndex: 1),
-        '/notifikasi': (_) => const PlaceholderScreen(judul: 'Notifikasi', navIndex: 3),
-        '/profil': (_) => const PlaceholderScreen(judul: 'Profil', navIndex: 4),
+        '/progres': (_) => const PlaceholderScreen(
+              judul: 'Progres',
+              navIndex: 1,
+            ),
+        '/notifikasi': (_) => const NotifikasiScreen(),
+        '/profil': (_) => const PlaceholderScreen(
+              judul: 'Profil',
+              navIndex: 4,
+            ),
       },
     );
   }
