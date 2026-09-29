@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
-import '../widgets/button_navbar.dart';
+import '../widgets/bottom_nav_bar.dart';
 
 // Dipakai sementara untuk 3 fitur yang dikerjakan anggota tim lain
 class PlaceholderScreen extends StatelessWidget {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-// Warna disamakan dengan versi web (brand GERAK) supaya konsisten
 class AppColors {
   static const brand = Color(0xFF2F6FED);
   static const brandDark = Color(0xFF1E56C8);
@@ -16,6 +15,12 @@ class AppColors {
 
   static const statAmber = Color(0xFFD97706);
   static const statAmberBg = Color(0xFFFFF1CC);
+
+  // Badge pil kecil di Dashboard & Jadwal ("Tuntas", "Nanti", "Besok")
+  static const badgeBg = Color(0xFFDDEBFF);
+  static const badgeText = brand;
+  static const badgeDoneBg = Color(0xFFD9F7E4);
+  static const badgeDoneText = statGreen;
 
   static const textDark = Color(0xFF1F2933);
   static const textGrey = Color(0xFF9AA5B1);

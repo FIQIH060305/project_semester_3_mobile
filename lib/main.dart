@@ -4,6 +4,7 @@ import 'core/app_colors.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/jadwal/jadwal_screen.dart';
 import 'screens/placeholder_screen.dart';
+import 'screens/riwayat/riwayat_olahraga_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +29,7 @@ class GerakApp extends StatelessWidget {
       routes: {
         '/dashboard': (_) => const DashboardScreen(),
         '/jadwal': (_) => const JadwalScreen(),
-        '/progres': (_) => const PlaceholderScreen(judul: 'Progres', navIndex: 1),
+        '/progres': (_) => const RiwayatOlahragaScreen(),
         '/notifikasi': (_) => const PlaceholderScreen(judul: 'Notifikasi', navIndex: 3),
         '/profil': (_) => const PlaceholderScreen(judul: 'Profil', navIndex: 4),
       },

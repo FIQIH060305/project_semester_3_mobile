@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/app_colors.dart';
 import '../../models/jadwal_item.dart';
-import '../../widgets/button_navbar.dart';
+import '../../widgets/bottom_nav_bar.dart';
 
 class TambahTugasScreen extends StatefulWidget {
   const TambahTugasScreen({super.key});
