@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'core/app_colors.dart';
+// Import halaman auth milikmu
+import 'screens/auth/login_screen.dart';
+import 'screens/auth/registrasi_screen.dart';
+import 'screens/auth/splash_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/jadwal/jadwal_screen.dart';
 import 'screens/riwayat/riwayat_olahraga_screen.dart';
@@ -26,8 +30,12 @@ class GerakApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.bg,
         fontFamily: 'Roboto',
       ),
-      initialRoute: '/dashboard',
+      // Alur: Splash → Login → Registrasi → Lengkapi Profil → Profil Berhasil → Login
+      initialRoute: '/splash',
       routes: {
+        '/splash': (_) => const SplashScreen(),
+        '/login': (_) => const LoginScreen(),
+        '/registrasi': (_) => const RegistrasiScreen(),
         '/dashboard': (_) => const DashboardScreen(),
         '/jadwal': (_) => const JadwalScreen(),
         '/progres': (_) => const RiwayatOlahragaScreen(),
