@@ -1,202 +1,167 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
-import '../dashboard/dashboard_screen.dart';
+import 'login_screen.dart';
 
-
-/// Halaman transisi setelah login berhasil sebelum masuk Dashboard.
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Stack(
+        children: [
+          // ============================================================
+          // DEKORASI GELOMBANG BIRU ATAS — dua lapis untuk kedalaman
+          // ============================================================
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ClipPath(
+              clipper: _WaveClipper(heightFactor: 0.58),
+              child: Container(
+                height: size.height * 0.32,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF0B5A9E), Color(0xFF1976D2)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Lapis kedua — warna sedikit lebih muda, sedikit lebih pendek
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ClipPath(
+              clipper: _WaveClipper(heightFactor: 0.72),
+              child: Container(
+                height: size.height * 0.28,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ============================================================
+          // KONTEN UTAMA
+          // ============================================================
+          SafeArea(
+            child: Column(
+              children: [
+                // Ruang di bawah wave
+                SizedBox(height: size.height * 0.28 + 16),
+
+                // Logo GERAK
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Image.asset(
+                        'assets/images/logo_gerak.png',
+                        width: 150,
+                        height: 150,
+                      ),
+                      const SizedBox(height: 32),
+                      const Text(
+                        'Sehat Hari ini',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textPrimary,
+                          height: 1.4,
+                        ),
+                      ),
+                      const Text(
+                        'lebih baik setiap hari.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Tombol Mulai
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(32, 0, 32, 40),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => const LoginScreen(),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 4,
+                        shadowColor: AppColors.primary.withValues(alpha: 0.4),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      child: const Text(
+                        'Mulai',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _SplashScreenState extends State<SplashScreen> {
-  @override
-  void initState() {
-    super.initState();
-    _goToDashboardAfterDelay();
-  }
-
-  Future<void> _goToDashboardAfterDelay() async {
-    await Future.delayed(const Duration(milliseconds: 2200));
-
-    if (!mounted) return;
-
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => const DashboardScreen(),
-      ),
-    );
-  }
+/// Wave clipper dengan kontrol heightFactor untuk dua lapis gelombang.
+class _WaveClipper extends CustomClipper<Path> {
+  final double heightFactor;
+  const _WaveClipper({this.heightFactor = 0.65});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // =========================
-            // LABEL ATAS
-            // =========================
-            Positioned(
-              top: 24,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.circle,
-                        size: 6,
-                        color: Color(0xFFE0A32E),
-                      ),
-                      SizedBox(width: 6),
-                      Text(
-                        'Obsess Athletic Lab',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // =========================
-            // KONTEN UTAMA
-            // =========================
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Logo
-                  Container(
-                    width: 110,
-                    height: 110,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.directions_run_rounded,
-                      color: Colors.white,
-                      size: 54,
-                    ),
-                  ),
-
-                  const SizedBox(height: 22),
-
-                  // Nama aplikasi
-                  const Text(
-                    'Obsess',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // Tagline
-                  const Text(
-                    'Sehat Hari ini lebih baik setiap hari.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Loading
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 13,
-                          height: 13,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Menyiapkan rute terbaikmu...',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // =========================
-            // VERSI DI BAWAH
-            // =========================
-            Positioned(
-              bottom: 16,
-              left: 0,
-              right: 0,
-              child: const Text(
-                'Versi 2.4 • Komunitas Atletik Indonesia',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: AppColors.textHint,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+  Path getClip(Size size) {
+    final path = Path();
+    final h = size.height;
+    final w = size.width;
+    path.lineTo(0, h * heightFactor);
+    path.cubicTo(
+      w * 0.2, h * (heightFactor + 0.25),
+      w * 0.6, h * (heightFactor - 0.15),
+      w, h * heightFactor,
     );
+    path.lineTo(w, 0);
+    path.close();
+    return path;
   }
+
+  @override
+  bool shouldReclip(covariant _WaveClipper old) =>
+      old.heightFactor != heightFactor;
 }

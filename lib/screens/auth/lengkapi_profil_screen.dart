@@ -81,11 +81,6 @@ String _jenisKelamin = '';
     }
   }
 
-  void _handleLewati() {
-    // "Lewati" = skip lengkapi profil, langsung balik ke Login. Stack
-    // dibersihkan total supaya tombol back nggak nyasar ke form registrasi.
-    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -114,9 +109,9 @@ String _jenisKelamin = '';
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Agar kami bisa membuat rencana latihan & target lari yang sesuai untuk Anda.',
+                    'Agar kami bisa membuat rencana\nyang sesuai untuk anda',
                     style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 13,
                       height: 1.4,
                       color: AppColors.textSecondary,
                     ),
@@ -234,27 +229,21 @@ String _jenisKelamin = '';
           ),
         ),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
           decoration: BoxDecoration(
-            color: AppColors.badgeBg,
+            border: Border.all(color: AppColors.primary),
             borderRadius: BorderRadius.circular(20),
           ),
           child: const Text(
             'Langkah 2 dari 2',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.primary,
             ),
           ),
         ),
-        GestureDetector(
-          onTap: _handleLewati,
-          child: const Text(
-            'Lewati',
-            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-          ),
-        ),
+        Image.asset('assets/images/logo_gerak.png', width: 36, height: 36),
       ],
     );
   }

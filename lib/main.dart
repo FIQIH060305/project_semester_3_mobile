@@ -29,8 +29,8 @@ class GerakApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.bg,
         fontFamily: 'Roboto',
       ),
-      // Ubah route awal ke '/login' (atau '/splash' jika ingin splash screen dulu)
-      initialRoute: '/login',
+      // Alur: Splash → Login → Registrasi → Lengkapi Profil → Profil Berhasil → Login
+      initialRoute: '/splash',
       routes: {
         '/splash': (_) => const SplashScreen(),
         '/login': (_) => const LoginScreen(),
