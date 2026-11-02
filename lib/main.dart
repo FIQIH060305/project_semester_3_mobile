@@ -9,7 +9,8 @@ import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/jadwal/jadwal_screen.dart';
 import 'screens/riwayat/riwayat_olahraga_screen.dart';
 import 'screens/notifikasi/notifikasi_screen.dart';
-import 'screens/placeholder_screen.dart';
+import 'screens/sesi/sesi_olahraga_screen.dart';
+import 'screens/profil/profil_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,9 +39,10 @@ class GerakApp extends StatelessWidget {
         '/registrasi': (_) => const RegistrasiScreen(),
         '/dashboard': (_) => const DashboardScreen(),
         '/jadwal': (_) => const JadwalScreen(),
+        '/tracking': (_) => const SesiOlahragaScreen(),
         '/progres': (_) => const RiwayatOlahragaScreen(),
         '/notifikasi': (_) => const NotifikasiScreen(),
-        '/profil': (_) => const PlaceholderScreen(judul: 'Profil', navIndex: 4),
+        '/profil': (_) => const ProfilScreen(),
       },
     );
   }

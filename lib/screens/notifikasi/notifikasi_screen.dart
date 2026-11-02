@@ -1,248 +1,331 @@
 import 'package:flutter/material.dart';
 
-class NotifikasiScreen extends StatefulWidget {
+class NotifikasiScreen extends StatelessWidget {
   const NotifikasiScreen({super.key});
-
-  @override
-  State<NotifikasiScreen> createState() => _NotifikasiScreenState();
-}
-
-class _NotifikasiScreenState extends State<NotifikasiScreen> {
-  bool semuaDibaca = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2F80ED),
+        backgroundColor: Colors.white,
         elevation: 0,
+        leading: GestureDetector(
+          onTap: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).pushReplacementNamed('/dashboard');
+            }
+          },
+          child: const Padding(
+            padding: EdgeInsets.only(left: 16),
+            child: Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFF38BDF8),
+              size: 26,
+            ),
+          ),
+        ),
+        centerTitle: true,
         title: const Text(
           'Notifikasi',
           style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+            color: Color(0xFF1E3A8A),
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() {
-                semuaDibaca = true;
-              });
-            },
-            child: const Text(
-              'Tandai Dibaca',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
       ),
-
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         children: [
-          Row(
-            children: [
-              const Text(
-                '3 Baru',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              if (!semuaDibaca)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F1FF),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Belum dibaca',
-                    style: TextStyle(
-                      color: Color(0xFF2F80ED),
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-            ],
+          // ── HARI INI ─────────────────────────────────────────────────
+          _buildSectionHeader(
+            tanggalLabel: 'Hari ini',
+            tanggalSub: 'Selasa, 20 Oktober 2026',
           ),
+          const SizedBox(height: 12),
 
-          const SizedBox(height: 20),
-
-          const Text(
-            'HARI INI',
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          _notificationCard(
-            icon: Icons.directions_walk,
+          // 1. Aktifitas
+          _buildNotifCard(
+            stripeColor: const Color(0xFF3B82F6),
+            iconContainerBg: const Color(0xFFBFDBFE),
+            icon: Icons.directions_run_rounded,
+            iconColor: const Color(0xFF2563EB),
+            badgeLabel: 'Aktifitas',
+            badgeBg: const Color(0xFFDBEAFE),
+            badgeTextColor: const Color(0xFF2563EB),
+            time: '07.00',
             title: 'Jalan 20 menit',
-            message: 'Jangan lupa selesaikan target aktivitasmu hari ini.',
-            time: '08:30',
-            status: 'Selesai',
+            desc1: 'Kamu sudah menyelesaikan aktifitas hari ini.',
+            desc2: 'Luar biasa tetap semangat!!!',
           ),
+          const SizedBox(height: 12),
 
-          _notificationCard(
-            icon: Icons.monitor_weight_outlined,
-            title: 'Catat berat badan kamu',
-            message: 'Yuk update berat badanmu untuk melihat perkembangan.',
-            time: '10:15',
-            status: null,
+          // 2. Makanan
+          _buildNotifCard(
+            stripeColor: const Color(0xFF10B981),
+            iconContainerBg: const Color(0xFFA7F3D0),
+            icon: Icons.rice_bowl_rounded,
+            iconColor: const Color(0xFF059669),
+            badgeLabel: 'Makanan',
+            badgeBg: const Color(0xFFD1FAE5),
+            badgeTextColor: const Color(0xFF059669),
+            time: '07.30',
+            title: 'Cek Berat Badan Kamu',
+            desc1: 'Sudah 3 hari belum diperbarui',
+            desc2: 'Yuk, Catat berat badanmu sekarang!',
           ),
+          const SizedBox(height: 12),
 
-          _notificationCard(
-            icon: Icons.trending_down,
-            title: 'Berat badan turun 1,5 kg',
-            message: 'Selamat! Perkembanganmu menunjukkan hasil yang baik.',
-            time: '12:40',
-            status: 'Target',
+          // 3. Progres
+          _buildNotifCard(
+            stripeColor: const Color(0xFFA855F7),
+            iconContainerBg: const Color(0xFFF3E8FF),
+            icon: Icons.menu_book_rounded,
+            iconColor: const Color(0xFF9333EA),
+            badgeLabel: 'Progres',
+            badgeBg: const Color(0xFFF3E8FF),
+            badgeTextColor: const Color(0xFF9333EA),
+            time: '08.00',
+            title: 'Berat badan turun 1,5 Kg',
+            desc1: 'Proses minggu ini bagus tetap pertahankan',
+            desc2: 'Luar biasa tetap semangat!!!',
           ),
+          const SizedBox(height: 24),
 
+          // ── KEMARIN ──────────────────────────────────────────────────
+          _buildSectionHeader(
+            tanggalLabel: 'Kemarin',
+            tanggalSub: 'Senin, 19 Oktober 2026',
+          ),
+          const SizedBox(height: 12),
+
+          // 4. Kalori
+          _buildNotifCard(
+            stripeColor: const Color(0xFFF97316),
+            iconContainerBg: const Color(0xFFFED7AA),
+            icon: Icons.local_fire_department_rounded,
+            iconColor: const Color(0xFFEA580C),
+            badgeLabel: 'Kalori',
+            badgeBg: const Color(0xFFFFEDD5),
+            badgeTextColor: const Color(0xFFEA580C),
+            time: '08.00',
+            title: 'Kamu Membakar 320 Kalori',
+            desc1: 'Hebat pembakaran kalori minggu ini',
+            desc2: 'sudah cukup tinggi',
+          ),
+          const SizedBox(height: 12),
+
+          // 5. Jadwal
+          _buildNotifCard(
+            stripeColor: const Color(0xFF3B82F6),
+            iconContainerBg: const Color(0xFFBFDBFE),
+            icon: Icons.equalizer_rounded,
+            iconColor: const Color(0xFF2563EB),
+            badgeLabel: 'Jadwal',
+            badgeBg: const Color(0xFFDBEAFE),
+            badgeTextColor: const Color(0xFF2563EB),
+            time: '08.00',
+            title: 'Admin membagikan jadwal\nberjalan 30 menit',
+            desc1: 'Luar biasa tetap semangat!!!',
+            desc2: null,
+          ),
           const SizedBox(height: 20),
-
-          const Text(
-            'KEMARIN',
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          _notificationCard(
-            icon: Icons.local_fire_department_outlined,
-            title: 'Konsisten 5 hari',
-            message: 'Kamu sudah konsisten menjalankan aktivitas selama 5 hari.',
-            time: '18:20',
-            status: null,
-          ),
-
-          _notificationCard(
-            icon: Icons.person_outline,
-            title: 'Profil berhasil disimpan',
-            message: 'Data profil kamu berhasil diperbarui.',
-            time: '20:10',
-            status: null,
-          ),
         ],
       ),
     );
   }
 
-  Widget _notificationCard({
-    required IconData icon,
-    required String title,
-    required String message,
-    required String time,
-    String? status,
+  Widget _buildSectionHeader({
+    required String tanggalLabel,
+    required String tanggalSub,
   }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
+    return Row(
+      children: [
+        // Kalender dengan jam di pojok
+        Container(
+          width: 42,
+          height: 42,
+          decoration: const BoxDecoration(
+            color: Color(0xFFDCEAFE),
+            shape: BoxShape.circle,
+          ),
+          child: const Center(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  Icons.calendar_month_outlined,
+                  color: Color(0xFF2563EB),
+                  size: 22,
+                ),
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Icon(
+                    Icons.access_time_filled,
+                    color: Color(0xFF2563EB),
+                    size: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F1FF),
-                borderRadius: BorderRadius.circular(12),
+            Text(
+              tanggalLabel,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF0F172A),
               ),
-              child: Icon(
-                icon,
-                color: const Color(0xFF2F80ED),
-                size: 24,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              tanggalSub,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNotifCard({
+    required Color stripeColor,
+    required Color iconContainerBg,
+    required IconData icon,
+    required Color iconColor,
+    required String badgeLabel,
+    required Color badgeBg,
+    required Color badgeTextColor,
+    required String time,
+    required String title,
+    required String desc1,
+    String? desc2,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F1FF), // Soft light blue tint card
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Left colored stripe
+            Container(
+              width: 12,
+              decoration: BoxDecoration(
+                color: stripeColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  bottomLeft: Radius.circular(16),
+                ),
               ),
             ),
 
-            const SizedBox(width: 12),
-
+            // Card content
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: semuaDibaca
-                                ? Colors.black87
-                                : Colors.black,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        time,
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 5),
-
-                  Text(
-                    message,
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 12,
-                      height: 1.4,
-                    ),
-                  ),
-
-                  if (status != null) ...[
-                    const SizedBox(height: 8),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Icon container
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE8F1FF),
-                        borderRadius: BorderRadius.circular(8),
+                        color: iconContainerBg,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(
-                        status,
-                        style: const TextStyle(
-                          color: Color(0xFF2F80ED),
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Icon(icon, color: iconColor, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+
+                    // Text column
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Badge + Time row
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 9, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: badgeBg,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  badgeLabel,
+                                  style: TextStyle(
+                                    color: badgeTextColor,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                time,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF64748B),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+
+                          // Title
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F172A),
+                              height: 1.25,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+
+                          // Description
+                          Text(
+                            desc1,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: Color(0xFF64748B),
+                              height: 1.35,
+                            ),
+                          ),
+                          if (desc2 != null)
+                            Text(
+                              desc2,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                color: Color(0xFF64748B),
+                                height: 1.35,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ],
-                ],
+                ),
               ),
             ),
           ],

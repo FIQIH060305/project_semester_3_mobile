@@ -75,12 +75,8 @@ class AppBottomNavBar extends StatelessWidget {
                 _buildProgresItem(context),
 
                 // 5. Profile
-                _buildStandardItem(
-                  context,
-                  index: 4,
-                  label: 'Profile',
-                  icon: Icons.person_rounded,
-                ),
+                // 5. Profile — kotak biru saat aktif (mirror Home)
+                _buildProfileItem(context),
               ],
             ),
           ),
@@ -97,11 +93,16 @@ class AppBottomNavBar extends StatelessWidget {
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF6DA7F2),
+                      color: currentIndex == 2
+                          ? const Color(0xFF1E56A0)
+                          : const Color(0xFF6DA7F2),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF4B8EE5).withValues(alpha: 0.35),
+                          color: (currentIndex == 2
+                                  ? const Color(0xFF1E56A0)
+                                  : const Color(0xFF4B8EE5))
+                              .withValues(alpha: 0.35),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -114,12 +115,14 @@ class AppBottomNavBar extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  const Text(
+                  Text(
                     'Tracking',
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF6B7280),
+                      fontWeight: currentIndex == 2 ? FontWeight.w800 : FontWeight.w600,
+                      color: currentIndex == 2
+                          ? const Color(0xFF1E56A0)
+                          : const Color(0xFF6B7280),
                     ),
                   ),
                 ],
@@ -224,6 +227,52 @@ class AppBottomNavBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildProfileItem(BuildContext context) {
+    final isProfile = currentIndex == 4;
+
+    return GestureDetector(
+      onTap: () => _navigasi(context, 4),
+      child: isProfile
+          ? Container(
+              width: 52,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E5B99),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.person_rounded, color: Colors.white, size: 22),
+                  Text(
+                    'Profile',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.person_outlined, color: Color(0xFF60A5FA), size: 24),
+                SizedBox(height: 2),
+                Text(
+                  'Profile',
+                  style: TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
