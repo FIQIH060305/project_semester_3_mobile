@@ -74,7 +74,7 @@ class SplashScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 32),
                       const Text(
-                        'Sehat Hari ini',
+                        'Sehat Bermula',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 18,
@@ -84,7 +84,7 @@ class SplashScreen extends StatelessWidget {
                         ),
                       ),
                       const Text(
-                        'lebih baik setiap hari.',
+                        'Dengan aktif bergerak',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 18,

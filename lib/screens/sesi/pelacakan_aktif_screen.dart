@@ -10,7 +10,7 @@ import 'services/tracking_calculator.dart';
 import 'widgets/osm_tracking_map.dart';
 
 class PelacakanAktifScreen extends StatefulWidget {
-  final String jenisOlahraga; // 'Berlari' atau 'Berjalan'
+  final String jenisOlahraga; // 'Berlari' atau 'Berjalan'  
   final double targetJarakKm;
   final double userWeightKg;
   final double userHeightCm;
