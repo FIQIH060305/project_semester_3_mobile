@@ -7,7 +7,8 @@ import 'ringkasan_sesi_screen.dart';
 import 'widgets/exercise_illustrations.dart';
 
 class SesiOlahragaScreen extends StatelessWidget {
-  const SesiOlahragaScreen({super.key});
+  final bool showBottomNav;
+  const SesiOlahragaScreen({super.key, this.showBottomNav = true});
 
   @override
   Widget build(BuildContext context) {
@@ -241,7 +242,7 @@ class SesiOlahragaScreen extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: const AppBottomNavBar(currentIndex: 2),
+      bottomNavigationBar: showBottomNav ? const AppBottomNavBar(currentIndex: 2) : null,
     );
   }
 

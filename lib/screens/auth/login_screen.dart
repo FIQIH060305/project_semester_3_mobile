@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/validators.dart';
 import '../../widgets/app_text_field.dart';
+import 'lupa_password_screen.dart';
 import 'registrasi_screen.dart';
 import 'splash_screen.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../main_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,11 +40,38 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      await Future.delayed(const Duration(milliseconds: 900));
+      await Future.delayed(const Duration(milliseconds: 600));
+
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+
+      final result = AuthService.instance.login(
+        email: email,
+        password: password,
+      );
+
       if (!mounted) return;
 
+      if (!result.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(child: Text(result.message)),
+              ],
+            ),
+            backgroundColor: const Color(0xFFD84343),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        return;
+      }
+
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
         (route) => false,
       );
     } catch (e) {
@@ -131,7 +161,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       _buildFieldLabel('Kata Sandi'),
                       GestureDetector(
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => LupaPasswordScreen(
+                                initialEmail: _emailController.text.trim(),
+                              ),
+                            ),
+                          );
+                        },
                         child: const Text(
                           'Lupa Password?',
                           style: TextStyle(

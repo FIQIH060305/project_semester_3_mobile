@@ -5,7 +5,8 @@ import '../../widgets/bottom_nav_bar.dart';
 import 'detail_riwayat_screen.dart';
 
 class RiwayatOlahragaScreen extends StatefulWidget {
-  const RiwayatOlahragaScreen({super.key});
+  final bool showBottomNav;
+  const RiwayatOlahragaScreen({super.key, this.showBottomNav = true});
 
   @override
   State<RiwayatOlahragaScreen> createState() => _RiwayatOlahragaScreenState();
@@ -109,7 +110,7 @@ class _RiwayatOlahragaScreenState extends State<RiwayatOlahragaScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: const AppBottomNavBar(currentIndex: 1),
+      bottomNavigationBar: widget.showBottomNav ? const AppBottomNavBar(currentIndex: 3) : null,
     );
   }
 }

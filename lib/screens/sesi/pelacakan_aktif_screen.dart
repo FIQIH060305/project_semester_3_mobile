@@ -821,7 +821,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: const AppBottomNavBar(currentIndex: 2),
     );
   }
 }

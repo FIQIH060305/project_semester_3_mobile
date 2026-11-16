@@ -97,7 +97,6 @@ class DetailRiwayatScreen extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: const AppBottomNavBar(currentIndex: 1),
     );
   }
 

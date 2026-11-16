@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 
 /// Model pengguna untuk autentikasi
 class AppUser {
@@ -9,6 +10,8 @@ class AppUser {
   final String email;
   String passwordHash;
   String salt;
+  String location;
+  String? photoPath;
 
   AppUser({
     required this.id,
@@ -16,6 +19,8 @@ class AppUser {
     required this.email,
     required this.passwordHash,
     required this.salt,
+    this.location = 'Jember,  Indonesia',
+    this.photoPath,
   });
 }
 
@@ -54,8 +59,8 @@ class AuthResult {
   });
 }
 
-/// Layanan Autentikasi dan Manajemen Password Reset
-class AuthService {
+/// Layanan Autentikasi dan Manajemen Password Reset & Profil
+class AuthService extends ChangeNotifier {
   AuthService._();
   static final AuthService instance = AuthService._();
 
@@ -79,12 +84,15 @@ class AuthService {
         name: 'Fiqih Al Firdaus',
         email: 'fiqih@gerak.id',
         password: 'Password123!',
+        location: 'Jember,  Indonesia',
       );
       auth.register(
         name: 'Pengguna Gerak',
         email: 'user@gmail.com',
         password: 'Password123!',
+        location: 'Jakarta,  Indonesia',
       );
+      auth.currentUser = auth._usersByEmail['fiqih@gerak.id'];
     }
   }
 
@@ -116,6 +124,8 @@ class AuthService {
     required String name,
     required String email,
     required String password,
+    String location = 'Jember,  Indonesia',
+    String? photoPath,
   }) {
     final normalizedEmail = email.trim().toLowerCase();
 
@@ -135,10 +145,13 @@ class AuthService {
       email: normalizedEmail,
       passwordHash: passwordHash,
       salt: salt,
+      location: location,
+      photoPath: photoPath,
     );
 
     _usersByEmail[normalizedEmail] = newUser;
     currentUser = newUser;
+    notifyListeners();
 
     return AuthResult(
       isSuccess: true,
@@ -148,7 +161,7 @@ class AuthService {
   }
 
   // =========================================================================
-  // 2. LOGIN
+  // 2. LOGIN & LOGOUT
   // =========================================================================
   AuthResult login({
     required String email,
@@ -173,11 +186,39 @@ class AuthService {
     }
 
     currentUser = user;
+    notifyListeners();
     return AuthResult(
       isSuccess: true,
       message: 'Berhasil masuk.',
       user: user,
     );
+  }
+
+  /// Logout pengguna yang sedang login
+  void logout() {
+    currentUser = null;
+    notifyListeners();
+  }
+
+  /// Perbarui profil pengguna yang sedang login
+  bool updateProfile({
+    String? name,
+    String? location,
+    String? photoPath,
+  }) {
+    if (currentUser == null) return false;
+
+    if (name != null && name.trim().isNotEmpty) {
+      currentUser!.name = name.trim();
+    }
+    if (location != null && location.trim().isNotEmpty) {
+      currentUser!.location = location.trim();
+    }
+    if (photoPath != null) {
+      currentUser!.photoPath = photoPath.isEmpty ? null : photoPath;
+    }
+    notifyListeners();
+    return true;
   }
 
   // =========================================================================

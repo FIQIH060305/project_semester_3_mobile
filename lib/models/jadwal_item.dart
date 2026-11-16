@@ -1,9 +1,24 @@
+import 'dart:convert';
+
+/// Jenis frekuensi pengulangan jadwal
+enum FrekuensiUlang {
+  tidakUlang,    // Jadwal sekali saja
+  sekaliSehari,  // Berulang setiap hari
+  sekaliSeminggu // Berulang setiap minggu pada hari yang sama
+}
+
+/// Model untuk satu jadwal latihan
 class JadwalItem {
   final String id;
   String judul;
   DateTime tanggal;
   bool selesai;
   bool ulangi;
+  FrekuensiUlang frekuensi;
+
+  /// ID jadwal "induk" yang memulai rantai pengulangan.
+  /// Null jika ini adalah jadwal induk itu sendiri.
+  String? parentId;
 
   JadwalItem({
     required this.id,
@@ -11,8 +26,11 @@ class JadwalItem {
     required this.tanggal,
     this.selesai = false,
     this.ulangi = false,
+    this.frekuensi = FrekuensiUlang.tidakUlang,
+    this.parentId,
   });
 
+  /// Menentukan kategori waktu untuk pengelompokan UI
   String get kategoriWaktu {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -25,25 +43,140 @@ class JadwalItem {
     return 'Minggu depan';
   }
 
-  // Label badge kecil di kartu ("Tuntas" / "Nanti" / "Besok")
+  /// Label badge kecil di kartu
   String get labelBadge {
     if (selesai) return 'Tuntas';
     if (kategoriWaktu == 'Besok') return 'Besok';
     return 'Nanti';
   }
+
+  /// Hitung tanggal kemunculan berikutnya berdasarkan frekuensi
+  DateTime get tanggalBerikutnya {
+    switch (frekuensi) {
+      case FrekuensiUlang.sekaliSehari:
+        return tanggal.add(const Duration(days: 1));
+      case FrekuensiUlang.sekaliSeminggu:
+        return tanggal.add(const Duration(days: 7));
+      case FrekuensiUlang.tidakUlang:
+        return tanggal; // Tidak ada berikutnya
+    }
+  }
+
+  /// Buat salinan jadwal berikutnya (untuk recurring) dengan ID baru
+  JadwalItem buatJadwalBerikutnya() {
+    return JadwalItem(
+      id: '${DateTime.now().millisecondsSinceEpoch}_${id.hashCode}',
+      judul: judul,
+      tanggal: tanggalBerikutnya,
+      selesai: false,
+      ulangi: ulangi,
+      frekuensi: frekuensi,
+      parentId: parentId ?? id, // Simpan referensi ke jadwal induk
+    );
+  }
+
+  /// Buat salinan dengan nilai yang diubah (untuk edit)
+  JadwalItem copyWith({
+    String? id,
+    String? judul,
+    DateTime? tanggal,
+    bool? selesai,
+    bool? ulangi,
+    FrekuensiUlang? frekuensi,
+    String? parentId,
+  }) {
+    return JadwalItem(
+      id: id ?? this.id,
+      judul: judul ?? this.judul,
+      tanggal: tanggal ?? this.tanggal,
+      selesai: selesai ?? this.selesai,
+      ulangi: ulangi ?? this.ulangi,
+      frekuensi: frekuensi ?? this.frekuensi,
+      parentId: parentId ?? this.parentId,
+    );
+  }
+
+  // ─── Serialization ─────────────────────────────────────────────
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'judul': judul,
+      'tanggal': tanggal.toIso8601String(),
+      'selesai': selesai,
+      'ulangi': ulangi,
+      'frekuensi': frekuensi.index,
+      'parentId': parentId,
+    };
+  }
+
+  factory JadwalItem.fromJson(Map<String, dynamic> json) {
+    return JadwalItem(
+      id: json['id'] as String,
+      judul: json['judul'] as String,
+      tanggal: DateTime.parse(json['tanggal'] as String),
+      selesai: json['selesai'] as bool? ?? false,
+      ulangi: json['ulangi'] as bool? ?? false,
+      frekuensi: FrekuensiUlang.values[json['frekuensi'] as int? ?? 0],
+      parentId: json['parentId'] as String?,
+    );
+  }
+
+  /// Encode seluruh list jadwal ke JSON string
+  static String encodeList(List<JadwalItem> items) {
+    return jsonEncode(items.map((e) => e.toJson()).toList());
+  }
+
+  /// Decode JSON string ke list jadwal
+  static List<JadwalItem> decodeList(String jsonStr) {
+    final List<dynamic> list = jsonDecode(jsonStr);
+    return list.map((e) => JadwalItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
 }
 
+/// Data dummy awal (digunakan sekali saat pertama kali buka aplikasi)
 List<JadwalItem> dataDummyJadwal() {
   final now = DateTime.now();
   return [
-    JadwalItem(id: '1', judul: 'Jalan 30 menit', tanggal: DateTime(now.year, now.month, now.day, 7, 0), selesai: true),
-    JadwalItem(id: '2', judul: 'Berlari 30 menit', tanggal: DateTime(now.year, now.month, now.day, 10, 0)),
-    JadwalItem(id: '3', judul: 'Push up 50 reps', tanggal: DateTime(now.year, now.month, now.day, 15, 0)),
-    JadwalItem(id: '4', judul: 'Jalan 20 menit', tanggal: now.subtract(const Duration(days: 1))),
-    JadwalItem(id: '5', judul: 'Jalan 20 menit', tanggal: now.subtract(const Duration(hours: 3))),
-    JadwalItem(id: '6', judul: 'Berlari 30 menit', tanggal: now.add(const Duration(days: 1))),
-    JadwalItem(id: '7', judul: 'Berlari 30 menit', tanggal: now.add(const Duration(days: 1, hours: 2))),
-    JadwalItem(id: '8', judul: 'Push Up 25 repitisi', tanggal: now.add(const Duration(days: 4))),
-    JadwalItem(id: '9', judul: 'Pull Up 30 Repitisi', tanggal: now.add(const Duration(days: 5))),
+    JadwalItem(
+      id: '1',
+      judul: 'Jalan 20 menit',
+      tanggal: DateTime(now.year, now.month, now.day, 7, 0).subtract(const Duration(days: 1)),
+      ulangi: true,
+      frekuensi: FrekuensiUlang.sekaliSehari,
+    ),
+    JadwalItem(
+      id: '2',
+      judul: 'Jalan 20 menit',
+      tanggal: DateTime(now.year, now.month, now.day, 7, 0).subtract(const Duration(days: 2)),
+      ulangi: true,
+      frekuensi: FrekuensiUlang.sekaliSehari,
+    ),
+    JadwalItem(
+      id: '3',
+      judul: 'Berlari 30 menit',
+      tanggal: DateTime(now.year, now.month, now.day + 1, 8, 0),
+      ulangi: true,
+      frekuensi: FrekuensiUlang.sekaliSeminggu,
+    ),
+    JadwalItem(
+      id: '4',
+      judul: 'Berlari 30 menit',
+      tanggal: DateTime(now.year, now.month, now.day + 1, 8, 0),
+      ulangi: false,
+    ),
+    JadwalItem(
+      id: '5',
+      judul: 'Push Up 25 repetisi',
+      tanggal: DateTime(now.year, now.month, now.day + 4, 8, 0),
+      ulangi: true,
+      frekuensi: FrekuensiUlang.sekaliSeminggu,
+    ),
+    JadwalItem(
+      id: '6',
+      judul: 'Pull Up 30 Repetisi',
+      tanggal: DateTime(now.year, now.month, now.day + 5, 8, 0),
+      ulangi: false,
+    ),
   ];
 }

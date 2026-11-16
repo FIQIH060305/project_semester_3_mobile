@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/validators.dart';
 import '../../widgets/app_text_field.dart';
@@ -53,8 +54,37 @@ class _RegistrasiScreenState extends State<RegistrasiScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      await Future.delayed(const Duration(milliseconds: 900));
+      await Future.delayed(const Duration(milliseconds: 600));
+
+      final name = _nameController.text.trim();
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+
+      final result = AuthService.instance.register(
+        name: name,
+        email: email,
+        password: password,
+      );
+
       if (!mounted) return;
+
+      if (!result.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(child: Text(result.message)),
+              ],
+            ),
+            backgroundColor: const Color(0xFFD84343),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        return;
+      }
 
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const LengkapiProfilScreen()),

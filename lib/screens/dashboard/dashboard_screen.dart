@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../notifikasi/notifikasi_screen.dart';
 import '../profil/profil_screen.dart';
+import '../main_navigation_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final bool showBottomNav;
+  const DashboardScreen({super.key, this.showBottomNav = true});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -106,7 +108,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: const AppBottomNavBar(currentIndex: 0),
+      bottomNavigationBar: widget.showBottomNav ? const AppBottomNavBar(currentIndex: 0) : null,
     );
   }
 

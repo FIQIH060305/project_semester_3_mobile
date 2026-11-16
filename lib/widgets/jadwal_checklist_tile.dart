@@ -6,12 +6,14 @@ import '../models/jadwal_item.dart';
 class JadwalChecklistTile extends StatelessWidget {
   final JadwalItem item;
   final VoidCallback onToggle;
+  final VoidCallback? onLongPress;
   final bool terlambat;
 
   const JadwalChecklistTile({
     super.key,
     required this.item,
     required this.onToggle,
+    this.onLongPress,
     this.terlambat = false,
   });
 
@@ -27,49 +29,77 @@ class JadwalChecklistTile extends StatelessWidget {
     } else if (item.kategoriWaktu == 'Besok') {
       labelWaktu = 'Besok, ${jamFormat.format(item.tanggal)}';
     } else {
-      labelWaktu = '${DateFormat('EEEE', 'id_ID').format(item.tanggal)}, ${jamFormat.format(item.tanggal)}';
+      labelWaktu =
+          '${DateFormat('EEEE', 'id_ID').format(item.tanggal)}, ${jamFormat.format(item.tanggal)}';
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: terlambat ? AppColors.statRose : AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Checkbox(
-            value: item.selesai,
-            activeColor: AppColors.brand,
-            onChanged: (_) => onToggle(),
+    // Ikon kecil menandakan jadwal recurring
+    final bool isRecurring =
+        item.ulangi && item.frekuensi != FrekuensiUlang.tidakUlang;
+
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: terlambat ? AppColors.statRose : AppColors.border,
           ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.judul,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    decoration: item.selesai ? TextDecoration.lineThrough : null,
-                    color: item.selesai ? AppColors.textGrey : AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  labelWaktu,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: terlambat ? AppColors.statRose : AppColors.brand,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+        ),
+        child: Row(
+          children: [
+            Checkbox(
+              value: item.selesai,
+              activeColor: AppColors.brand,
+              onChanged: (_) => onToggle(),
             ),
-          ),
-        ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.judul,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      decoration:
+                          item.selesai ? TextDecoration.lineThrough : null,
+                      color:
+                          item.selesai ? AppColors.textGrey : AppColors.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        labelWaktu,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: terlambat
+                              ? AppColors.statRose
+                              : AppColors.brand,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (isRecurring) ...[
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.repeat_rounded,
+                          size: 14,
+                          color: terlambat
+                              ? AppColors.statRose.withValues(alpha: 0.7)
+                              : AppColors.brand.withValues(alpha: 0.6),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
