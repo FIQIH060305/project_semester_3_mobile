@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../notifikasi/notifikasi_screen.dart';
 import '../profil/profil_screen.dart';
+import '../../services/auth_service.dart';
+
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -11,8 +13,13 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final namaPengguna = 'Robit';
-  final streakHari = 10;
+final namaPengguna =
+    AuthService.instance.currentUser?.name ?? 'Pengguna';
+
+final emailPengguna =
+    AuthService.instance.currentUser?.email ?? '';
+
+final streakHari = 10;
 
   // Daftar latihan hari ini yang dapat ditoggle
   late List<_LatihanData> latihanHariIni;
@@ -110,30 +117,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── 1. HEADER ────────────────────────────────────────────────────────
-  Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
+ 
+Widget _buildHeader() {
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Text(
-                  'Hai, $namaPengguna',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF1F2937),
+                Flexible(
+                  child: Text(
+                    'Hai, $namaPengguna',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1F2937),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
-                const Text(
-                  '👋',
-                  style: TextStyle(fontSize: 20),
-                ),
+                const Text('👋', style: TextStyle(fontSize: 20)),
               ],
             ),
             const SizedBox(height: 3),
@@ -145,70 +154,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 fontWeight: FontWeight.w500,
               ),
             ),
+            const SizedBox(height: 4),
+            Text(
+              emailPengguna,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF6B7280),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
+      ),
 
-        // Badge Streak + Avatar Profil
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      // Badge Streak + Avatar Profil
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 7,
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFDF7D),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('🔥', style: TextStyle(fontSize: 14)),
+                const SizedBox(width: 5),
+                Text(
+                  '$streakHari Hari',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                    color: Color(0xFF374151),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Avatar kecil → navigasi ke Profil
+          GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ProfilScreen(),
+                ),
+              );
+            },
+            child: Container(
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
-                color: const Color(0xFFFFDF7D),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('🔥', style: TextStyle(fontSize: 14)),
-                  const SizedBox(width: 5),
-                  Text(
-                    '$streakHari Hari',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12.5,
-                      color: Color(0xFF374151),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            // Avatar kecil → navigasi ke Profil
-            GestureDetector(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ProfilScreen()),
-                );
-              },
-              child: Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF2F80ED), width: 2),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: const Color(0xFF2F80ED),
+                  width: 2,
                 ),
-                child: ClipOval(
-                  child: Image.asset(
-                    'assets/images/profile_user.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: const Color(0xFFDBEAFE),
-                      child: const Icon(
-                        Icons.person_rounded,
-                        color: Color(0xFF2F80ED),
-                        size: 20,
-                      ),
+              ),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/profile_user.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: const Color(0xFFDBEAFE),
+                    child: const Icon(
+                      Icons.person_rounded,
+                      color: Color(0xFF2F80ED),
+                      size: 20,
                     ),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
-      ],
-    );
-  }
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
 
   // ── 2. FOKUS PAGI CARD ───────────────────────────────────────────────
   Widget _buildFokusPagiCard() {

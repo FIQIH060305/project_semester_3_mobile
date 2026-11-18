@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_colors.dart';
 import '../utils/bmi_calculator.dart';
 import '../utils/validators.dart';
 import 'profil_berhasil_screen.dart';
+import '../../services/auth_service.dart';
 
 class LengkapiProfilScreen extends StatefulWidget {
   const LengkapiProfilScreen({super.key});
@@ -14,12 +16,13 @@ class LengkapiProfilScreen extends StatefulWidget {
 class _LengkapiProfilScreenState extends State<LengkapiProfilScreen> {
   final _formKey = GlobalKey<FormState>();
 
-final _usiaController = TextEditingController();
-final _tinggiController = TextEditingController();
-final _beratController = TextEditingController();
-final _targetBeratController = TextEditingController();
+  final _usiaController = TextEditingController();
+  final _tinggiController = TextEditingController();
+  final _beratController = TextEditingController();
+  final _targetBeratController = TextEditingController();
+  final AuthService _authService = AuthService.instance;
 
-String _jenisKelamin = '';
+  String _jenisKelamin = '';
   bool _isSubmitting = false;
 
   BmiResult _bmi = const BmiResult(value: 0, category: '-', color: Colors.grey);
@@ -54,20 +57,63 @@ String _jenisKelamin = '';
   Future<void> _handleSimpan() async {
     FocusScope.of(context).unfocus();
 
-    final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) return;
     if (_isSubmitting) return;
 
+    final isValid = _formKey.currentState?.validate() ?? false;
+
+    // Validasi usia
+    if (_usiaController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Silakan pilih usia terlebih dahulu.')),
+      );
+      return;
+    }
+
+    // Validasi jenis kelamin
+    if (_jenisKelamin.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Silakan pilih jenis kelamin.')),
+      );
+      return;
+    }
+
+    if (!isValid) return;
+
     setState(() => _isSubmitting = true);
+
     try {
-      // TODO: simpan data profil ke backend/local storage di sini.
-      await Future.delayed(const Duration(milliseconds: 700));
+      final usia = int.parse(_usiaController.text.trim());
+
+      final tinggi = double.parse(_tinggiController.text.trim());
+
+      final berat = double.parse(_beratController.text.trim());
+
+      final beratSaatIni = double.parse(_beratController.text.trim());
+
+      final targetBerat = double.parse(_targetBeratController.text.trim());
+
+      // Konversi jenis kelamin sesuai database Laravel
+      final jenisKelamin = _jenisKelamin == 'Laki-Laki' ? 'L' : 'P';
+
+      // Kirim data ke Laravel API
+      final result = await _authService.completeRegistration(
+        jenisKelamin: jenisKelamin,
+        usia: usia,
+        tinggiBadan: tinggi,
+        beratBadanAwal: berat,
+        deviceName: 'GERAK Flutter',
+      );
+
       if (!mounted) return;
 
-      final beratSaatIni = double.tryParse(_beratController.text.trim()) ?? 0;
-      final targetBerat =
-          double.tryParse(_targetBeratController.text.trim()) ?? 0;
+      if (!result.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message), backgroundColor: Colors.red),
+        );
+        return;
+      }
 
+      // Registrasi berhasil
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => ProfilBerhasilScreen(
@@ -76,11 +122,21 @@ String _jenisKelamin = '';
           ),
         ),
       );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Terjadi kesalahan: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +189,10 @@ String _jenisKelamin = '';
                           controller: _tinggiController,
                           unit: 'cm',
                           validator: Validators.numberInRange(
-                              label: 'Tinggi badan', min: 100, max: 250),
+                            label: 'Tinggi badan',
+                            min: 100,
+                            max: 250,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -143,7 +202,10 @@ String _jenisKelamin = '';
                           controller: _beratController,
                           unit: 'kg',
                           validator: Validators.numberInRange(
-                              label: 'Berat badan', min: 20, max: 300),
+                            label: 'Berat badan',
+                            min: 20,
+                            max: 300,
+                          ),
                         ),
                       ),
                     ],
@@ -160,8 +222,9 @@ String _jenisKelamin = '';
                       onPressed: _isSubmitting ? null : _handleSimpan,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
-                        disabledBackgroundColor:
-                            AppColors.primary.withOpacity(0.6),
+                        disabledBackgroundColor: AppColors.primary.withOpacity(
+                          0.6,
+                        ),
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
@@ -183,8 +246,9 @@ String _jenisKelamin = '';
                                 Text(
                                   'Simpan & Lanjut',
                                   style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                                 SizedBox(width: 6),
                                 Icon(Icons.arrow_forward_rounded, size: 18),
@@ -198,7 +262,9 @@ String _jenisKelamin = '';
                       'Data ini dapat Anda perbarui kapan saja di menu profil.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                          fontSize: 11, color: AppColors.textSecondary),
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -224,8 +290,11 @@ String _jenisKelamin = '';
               color: AppColors.badgeBg,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.arrow_back_rounded,
-                size: 18, color: AppColors.primary),
+            child: const Icon(
+              Icons.arrow_back_rounded,
+              size: 18,
+              color: AppColors.primary,
+            ),
           ),
         ),
         Container(
@@ -302,8 +371,10 @@ String _jenisKelamin = '';
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const Icon(Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.primary),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.primary,
+                ),
               ],
             ),
           ],
@@ -355,8 +426,10 @@ String _jenisKelamin = '';
                     ),
                   ),
                 ),
-                const Icon(Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.primary),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.primary,
+                ),
               ],
             ),
           ],
@@ -421,8 +494,10 @@ String _jenisKelamin = '';
                         ),
                       ),
                       trailing: isSelected
-                          ? const Icon(Icons.check_rounded,
-                              color: AppColors.primary)
+                          ? const Icon(
+                              Icons.check_rounded,
+                              color: AppColors.primary,
+                            )
                           : null,
                       onTap: () => Navigator.of(context).pop(option),
                     );
@@ -472,14 +547,16 @@ String _jenisKelamin = '';
                   decoration: const InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
-                    errorStyle: TextStyle(fontSize: 10.5, color: Color(0xFFD84343)),
+                    errorStyle: TextStyle(
+                      fontSize: 10.5,
+                      color: Color(0xFFD84343),
+                    ),
                     contentPadding: EdgeInsets.symmetric(vertical: 4),
                   ),
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppColors.badgeBg,
                   borderRadius: BorderRadius.circular(8),
@@ -487,7 +564,9 @@ String _jenisKelamin = '';
                 child: Text(
                   unit,
                   style: const TextStyle(
-                      fontSize: 11, color: AppColors.primary),
+                    fontSize: 11,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
             ],
@@ -532,8 +611,7 @@ String _jenisKelamin = '';
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFCEFDB),
                   borderRadius: BorderRadius.circular(10),
@@ -556,7 +634,10 @@ String _jenisKelamin = '';
                   controller: _targetBeratController,
                   keyboardType: TextInputType.number,
                   validator: Validators.numberInRange(
-                      label: 'Target berat badan', min: 20, max: 300),
+                    label: 'Target berat badan',
+                    min: 20,
+                    max: 300,
+                  ),
                   onChanged: (_) => setState(() {}),
                   style: const TextStyle(
                     fontSize: 18,
@@ -566,16 +647,24 @@ String _jenisKelamin = '';
                   decoration: const InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
-                    errorStyle: TextStyle(fontSize: 10.5, color: Color(0xFFD84343)),
+                    errorStyle: TextStyle(
+                      fontSize: 10.5,
+                      color: Color(0xFFD84343),
+                    ),
                     contentPadding: EdgeInsets.symmetric(vertical: 4),
                   ),
                 ),
               ),
-              const Text('kg',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              const Text(
+                'kg',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
               const SizedBox(width: 10),
-              const Icon(Icons.schedule_rounded,
-                  size: 14, color: AppColors.primary),
+              const Icon(
+                Icons.schedule_rounded,
+                size: 14,
+                color: AppColors.primary,
+              ),
               const SizedBox(width: 3),
               const Text(
                 'Pacing Otomatis',
@@ -607,8 +696,11 @@ String _jenisKelamin = '';
               color: AppColors.primary,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.monitor_weight_outlined,
-                size: 18, color: Colors.white),
+            child: const Icon(
+              Icons.monitor_weight_outlined,
+              size: 18,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(

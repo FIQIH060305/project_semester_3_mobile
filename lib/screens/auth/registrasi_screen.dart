@@ -4,6 +4,7 @@ import '../utils/validators.dart';
 import '../../widgets/app_text_field.dart';
 import 'lengkapi_profil_screen.dart';
 import 'login_screen.dart';
+import '../../services/auth_service.dart';
 
 class RegistrasiScreen extends StatefulWidget {
   const RegistrasiScreen({super.key});
@@ -33,36 +34,71 @@ class _RegistrasiScreenState extends State<RegistrasiScreen> {
     super.dispose();
   }
 
-  Future<void> _handleRegister() async {
-    FocusScope.of(context).unfocus();
-    final isValid = _formKey.currentState?.validate() ?? false;
+ 
+Future<void> _handleRegister() async {
+  FocusScope.of(context).unfocus();
 
-    if (!_agreeToTerms) {
+  final isValid = _formKey.currentState?.validate() ?? false;
+
+  if (!_agreeToTerms) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Kamu harus menyetujui Syarat & Ketentuan terlebih dahulu',
+        ),
+        backgroundColor: Color(0xFFD84343),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    return;
+  }
+
+  if (!isValid || _isSubmitting) return;
+
+  setState(() => _isSubmitting = true);
+
+  try {
+    // Simpan data registrasi sementara
+    final result = AuthService.instance.register(
+      name: _nameController.text,
+      email: _emailController.text,
+      password: _passwordController.text,
+    );
+
+    if (!mounted) return;
+
+    if (!result.isSuccess) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Kamu harus menyetujui Syarat & Ketentuan terlebih dahulu'),
-          backgroundColor: Color(0xFFD84343),
-          behavior: SnackBarBehavior.floating,
+        SnackBar(
+          content: Text(result.message),
+          backgroundColor: const Color(0xFFD84343),
         ),
       );
       return;
     }
 
-    if (!isValid) return;
-    if (_isSubmitting) return;
+    // Lanjut ke halaman lengkapi profil
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const LengkapiProfilScreen(),
+      ),
+    );
+  } catch (e) {
+    if (!mounted) return;
 
-    setState(() => _isSubmitting = true);
-    try {
-      await Future.delayed(const Duration(milliseconds: 900));
-      if (!mounted) return;
-
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const LengkapiProfilScreen()),
-      );
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Registrasi gagal: $e'),
+        backgroundColor: const Color(0xFFD84343),
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() => _isSubmitting = false);
     }
   }
+}
+
 
   @override
   Widget build(BuildContext context) {

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_colors.dart';
 import '../utils/validators.dart';
 import '../../widgets/app_text_field.dart';
 import 'registrasi_screen.dart';
-import 'splash_screen.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,37 +32,73 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     FocusScope.of(context).unfocus();
+
     final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) return;
-    if (_isSubmitting) return;
+    if (!isValid || _isSubmitting) return;
 
     setState(() => _isSubmitting = true);
+
     try {
-      await Future.delayed(const Duration(milliseconds: 900));
+      // 1. Login ke Laravel
+      final result = await AuthService.instance.login(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+
       if (!mounted) return;
 
+      if (!result.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            backgroundColor: const Color(0xFFD84343),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      // 2. Verifikasi token dan ambil profil dari Laravel
+      final profileResult = await AuthService.instance.me();
+
+      if (!mounted) return;
+
+      if (!profileResult.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(profileResult.message),
+            backgroundColor: const Color(0xFFD84343),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      // 3. Masuk dashboard jika keduanya berhasil
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const DashboardScreen()),
         (route) => false,
       );
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Gagal masuk. Periksa email/kata sandi kamu.'),
-          backgroundColor: Color(0xFFD84343),
+        SnackBar(
+          content: Text('Terjadi kesalahan: $e'),
+          backgroundColor: const Color(0xFFD84343),
           behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
   void _goToRegister() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const RegistrasiScreen()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const RegistrasiScreen()));
   }
 
   @override
@@ -160,8 +197,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           size: 20,
                           color: AppColors.textSecondary,
                         ),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
                       ),
                     ),
                   ),

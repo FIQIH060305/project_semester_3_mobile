@@ -1,8 +1,37 @@
 import 'package:flutter/material.dart';
-import '../../widgets/bottom_nav_bar.dart';
 
-class ProfilScreen extends StatelessWidget {
+import '../../widgets/bottom_nav_bar.dart';
+import '../../services/auth_service.dart';
+
+class ProfilScreen extends StatefulWidget {
   const ProfilScreen({super.key});
+
+  @override
+  State<ProfilScreen> createState() => _ProfilScreenState();
+}
+
+class _ProfilScreenState extends State<ProfilScreen> {
+  bool _isLoadingProfile = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final result = await AuthService.instance.me();
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingProfile = false;
+    });
+
+    if (!result.isSuccess) {
+      debugPrint('Gagal memuat profil: ${result.message}');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,8 +73,11 @@ class ProfilScreen extends StatelessWidget {
           child: Column(
             children: [
               // ── 1. CARD AVATAR & NAMA ─────────────────────────────────
-              _buildAvatarCard(context),
-              const SizedBox(height: 18),
+_buildAvatarCard(context),
+const SizedBox(height: 18),
+
+_buildBiodataCard(),
+const SizedBox(height: 18),
 
               // ── 2. STATISTIK 3 CARD TERPISAH ─────────────────────────
               Row(
@@ -95,6 +127,11 @@ class ProfilScreen extends StatelessWidget {
   // 1. CARD AVATAR + NAMA + EDIT PROFIL
   // ─────────────────────────────────────────────────────────────────────
   Widget _buildAvatarCard(BuildContext context) {
+    final user = _isLoadingProfile
+    ? null
+    : AuthService.instance.currentUser;
+    final namaPengguna = user?.name ?? 'Pengguna';
+    final emailPengguna = user?.email ?? '';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
@@ -121,10 +158,7 @@ class ProfilScreen extends StatelessWidget {
                 height: 96,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFF0077E6),
-                    width: 3,
-                  ),
+                  border: Border.all(color: const Color(0xFF0077E6), width: 3),
                 ),
                 child: ClipOval(
                   child: Image.asset(
@@ -166,26 +200,24 @@ class ProfilScreen extends StatelessWidget {
           const SizedBox(height: 14),
 
           // Nama
-          const Text(
-            'Fiqih Al Firdaus',
-            style: TextStyle(
+          Text(
+            namaPengguna,
+            style: const TextStyle(
               fontSize: 21,
               fontWeight: FontWeight.w900,
               color: Color(0xFF0F172A),
             ),
           ),
-          const SizedBox(height: 4),
 
           // Lokasi
-          const Text(
-            'Jember,  Indonesia',
-            style: TextStyle(
+          Text(
+            emailPengguna,
+            style: const TextStyle(
               fontSize: 13.5,
               color: Color(0xFF64748B),
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 18),
 
           // Tombol Edit Profil
           SizedBox(
@@ -200,7 +232,11 @@ class ProfilScreen extends StatelessWidget {
                   ),
                 );
               },
-              icon: const Icon(Icons.edit_rounded, color: Colors.white, size: 18),
+              icon: const Icon(
+                Icons.edit_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
               label: const Text(
                 'Edit Profil',
                 style: TextStyle(
@@ -224,6 +260,80 @@ class ProfilScreen extends StatelessWidget {
     );
   }
 
+Widget _buildBiodataCard() {
+  final user = AuthService.instance.currentUser;
+
+  final jenisKelamin = user?.jenisKelamin?.toString() ?? '-';
+  final usia = user?.usia?.toString() ?? '-';
+  final tinggiBadan = user?.tinggiBadan?.toString() ?? '-';
+  final beratBadan = user?.beratBadanAwal?.toString() ?? '-';
+
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+      border: Border.all(color: const Color(0xFFE2E8F0)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.03),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: _isLoadingProfile
+        ? const Center(
+            child: CircularProgressIndicator(),
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Informasi Pribadi',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              _buildBiodataRow('Jenis Kelamin', jenisKelamin),
+              _buildBiodataRow('Usia', '$usia tahun'),
+              _buildBiodataRow('Tinggi Badan', '$tinggiBadan cm'),
+              _buildBiodataRow('Berat Badan Awal', '$beratBadan kg'),
+            ],
+          ),
+  );
+}
+
+Widget _buildBiodataRow(String label, String value) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFF64748B),
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+      ],
+    ),
+  );
+}
   // ─────────────────────────────────────────────────────────────────────
   // 2. STAT KARTU TUNGGAL
   // ─────────────────────────────────────────────────────────────────────
@@ -355,8 +465,10 @@ class ProfilScreen extends StatelessWidget {
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFEDD5),
                   borderRadius: BorderRadius.circular(12),
@@ -400,8 +512,7 @@ class ProfilScreen extends StatelessWidget {
               ),
               Row(
                 children: const [
-                  Icon(Icons.bolt_rounded,
-                      color: Color(0xFFD97706), size: 18),
+                  Icon(Icons.bolt_rounded, color: Color(0xFFD97706), size: 18),
                   SizedBox(width: 2),
                   Text(
                     'Tinggal 6.5 km lagi!',
@@ -424,8 +535,7 @@ class ProfilScreen extends StatelessWidget {
               value: 0.855,
               minHeight: 9,
               backgroundColor: Color(0xFFE8F1FF),
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
             ),
           ),
           const SizedBox(height: 16),
@@ -439,8 +549,11 @@ class ProfilScreen extends StatelessWidget {
             ),
             child: Row(
               children: const [
-                Icon(Icons.emoji_events_outlined,
-                    color: Color(0xFF0077E6), size: 20),
+                Icon(
+                  Icons.emoji_events_outlined,
+                  color: Color(0xFF0077E6),
+                  size: 20,
+                ),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(

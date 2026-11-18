@@ -1,342 +1,429 @@
-import 'dart:convert';
-import 'dart:math';
-import 'package:crypto/crypto.dart';
 
-/// Model pengguna untuk autentikasi
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+// =====================================================
+// MODEL USER
+// =====================================================
+
 class AppUser {
   final String id;
-  String name;
+  final String name;
   final String email;
-  String passwordHash;
-  String salt;
+  final String? jenisKelamin;
+  final int? usia;
+  final double? tinggiBadan;
+  final double? beratBadanAwal;
+  final String? fotoProfil;
+  final String? statusAkun;
 
   AppUser({
     required this.id,
     required this.name,
     required this.email,
-    required this.passwordHash,
-    required this.salt,
-  });
-}
-
-/// Model token / kode reset password
-class PasswordResetToken {
-  final String token;
-  final String email;
-  final DateTime createdAt;
-  final DateTime expiresAt;
-  bool isUsed;
-
-  PasswordResetToken({
-    required this.token,
-    required this.email,
-    required this.createdAt,
-    required this.expiresAt,
-    this.isUsed = false,
+    this.jenisKelamin,
+    this.usia,
+    this.tinggiBadan,
+    this.beratBadanAwal,
+    this.fotoProfil,
+    this.statusAkun,
   });
 
-  bool get isExpired => DateTime.now().isAfter(expiresAt);
-  bool get isValid => !isUsed && !isExpired;
+  factory AppUser.fromJson(Map<String, dynamic> json) {
+    return AppUser(
+      id: json['id_akun']?.toString() ?? '',
+      name: json['nama_lengkap'] ?? '',
+      email: json['email'] ?? '',
+      jenisKelamin: json['jenis_kelamin'],
+      usia: int.tryParse(json['usia']?.toString() ?? ''),
+      tinggiBadan:
+          double.tryParse(json['tinggi_badan']?.toString() ?? ''),
+      beratBadanAwal:
+          double.tryParse(json['berat_badan_awal']?.toString() ?? ''),
+      fotoProfil: json['foto_profil'],
+      statusAkun: json['status_akun'],
+    );
+  }
 }
 
-/// Hasil dari operasi autentikasi
+// =====================================================
+// AUTH RESULT
+// =====================================================
+
 class AuthResult {
   final bool isSuccess;
   final String message;
   final AppUser? user;
-  final String? resetToken;
+  final String? token;
 
   AuthResult({
     required this.isSuccess,
     required this.message,
     this.user,
-    this.resetToken,
+    this.token,
   });
 }
 
-/// Layanan Autentikasi dan Manajemen Password Reset
+// =====================================================
+// AUTH SERVICE
+// =====================================================
+
 class AuthService {
   AuthService._();
+
   static final AuthService instance = AuthService._();
 
-  // Durasi masa berlaku token reset password (10 Menit)
-  static const Duration tokenExpiryDuration = Duration(minutes: 10);
+  static const String baseUrl = 'http://127.0.0.1:8000/api';
 
-  // Database in-memory untuk user terdaftar
-  final Map<String, AppUser> _usersByEmail = {};
+  static const String _tokenKey = 'auth_token';
 
-  // Daftar token reset password yang pernah dibuat
-  final List<PasswordResetToken> _resetTokens = [];
-
-  // Pengguna yang sedang login saat ini
   AppUser? currentUser;
+  String? _token;
 
-  // Inisialisasi data awal (Pre-seeded users)
-  static void initialize() {
-    final auth = instance;
-    if (auth._usersByEmail.isEmpty) {
-      auth.register(
-        name: 'Fiqih Al Firdaus',
-        email: 'fiqih@gerak.id',
-        password: 'Password123!',
-      );
-      auth.register(
-        name: 'Pengguna Gerak',
-        email: 'user@gmail.com',
-        password: 'Password123!',
-      );
+  // Data registrasi sementara
+  Map<String, dynamic>? _registrationDraft;
+
+  // ===================================================
+  // HEADER
+  // ===================================================
+
+  Future<Map<String, String>> _headers({
+    bool authenticated = false,
+  }) async {
+    final headers = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+
+    if (authenticated) {
+      final token = await getToken();
+
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+    }
+
+    return headers;
+  }
+
+  // ===================================================
+  // TOKEN MANAGEMENT
+  // ===================================================
+
+  Future<String?> getToken() async {
+    if (_token != null) return _token;
+
+    final prefs = await SharedPreferences.getInstance();
+    _token = prefs.getString(_tokenKey);
+
+    return _token;
+  }
+
+  Future<void> _saveToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString(_tokenKey, token);
+    _token = token;
+  }
+
+  Future<void> _clearToken() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.remove(_tokenKey);
+
+    _token = null;
+    currentUser = null;
+  }
+
+  // ===================================================
+  // RESPONSE HANDLING
+  // ===================================================
+
+  Map<String, dynamic> _decodeResponse(http.Response response) {
+    final decoded = jsonDecode(response.body);
+
+    if (decoded is! Map) {
+      throw const FormatException('Format respons server tidak valid.');
+    }
+
+    return Map<String, dynamic>.from(decoded);
+  }
+
+  String _errorMessage(http.Response response) {
+    try {
+      final body = _decodeResponse(response);
+
+      if (body['errors'] is Map) {
+        final errors = body['errors'] as Map;
+        final messages = <String>[];
+
+        for (final value in errors.values) {
+          if (value is List && value.isNotEmpty) {
+            messages.add(value.first.toString());
+          }
+        }
+
+        if (messages.isNotEmpty) {
+          return messages.join('\n');
+        }
+      }
+
+      return body['message']?.toString() ??
+          'Terjadi kesalahan pada server.';
+    } catch (_) {
+      return 'Terjadi kesalahan pada server.';
     }
   }
 
-  /// Helper untuk hashing password dengan salt menggunakan SHA-256
-  static String hashPassword(String password, String salt) {
-    final bytes = utf8.encode('$password::$salt');
-    final digest = sha256.convert(bytes);
-    return digest.toString();
-  }
+  // ===================================================
+  // 1. REGISTER DRAFT
+  // ===================================================
 
-  /// Generate salt acak
-  static String _generateSalt([int length = 16]) {
-    final random = Random.secure();
-    final values = List<int>.generate(length, (i) => random.nextInt(256));
-    return base64Url.encode(values);
-  }
-
-  /// Generate 6 digit token / kode verifikasi reset password
-  static String _generateResetToken() {
-    final random = Random.secure();
-    final code = 100000 + random.nextInt(900000);
-    return code.toString();
-  }
-
-  // =========================================================================
-  // 1. REGISTRASI
-  // =========================================================================
   AuthResult register({
     required String name,
     required String email,
     required String password,
   }) {
-    final normalizedEmail = email.trim().toLowerCase();
-
-    if (_usersByEmail.containsKey(normalizedEmail)) {
-      return AuthResult(
-        isSuccess: false,
-        message: 'Alamat email sudah terdaftar. Silakan masuk.',
-      );
-    }
-
-    final salt = _generateSalt();
-    final passwordHash = hashPassword(password, salt);
-
-    final newUser = AppUser(
-      id: 'USR_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}',
-      name: name.trim(),
-      email: normalizedEmail,
-      passwordHash: passwordHash,
-      salt: salt,
-    );
-
-    _usersByEmail[normalizedEmail] = newUser;
-    currentUser = newUser;
+    _registrationDraft = {
+      'nama_lengkap': name.trim(),
+      'email': email.trim(),
+      'password': password,
+      'password_confirmation': password,
+    };
 
     return AuthResult(
       isSuccess: true,
-      message: 'Registrasi berhasil.',
-      user: newUser,
+      message: 'Data registrasi berhasil disiapkan.',
     );
   }
 
-  // =========================================================================
-  // 2. LOGIN
-  // =========================================================================
-  AuthResult login({
+  // ===================================================
+  // 2. COMPLETE REGISTRATION
+  // ===================================================
+
+
+Future<AuthResult> completeRegistration({
+  required String jenisKelamin,
+  required int usia,
+  required num tinggiBadan,
+  required num beratBadanAwal,
+  required String deviceName,
+}) async {
+  try {
+    if (_registrationDraft == null) {
+      return AuthResult(
+        isSuccess: false,
+        message: 'Data registrasi tidak ditemukan. Silakan daftar ulang.',
+      );
+    }
+
+    final payload = {
+      ..._registrationDraft!,
+      'jenis_kelamin': jenisKelamin,
+      'usia': usia,
+      'tinggi_badan': tinggiBadan.toDouble(),
+      'berat_badan_awal': beratBadanAwal.toDouble(),
+      'device_name': deviceName,
+    };
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/register'),
+      headers: await _headers(),
+      body: jsonEncode(payload),
+    );
+
+    final body = _decodeResponse(response);
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      final data = body['data'];
+
+      if (data is! Map || data['akun'] is! Map) {
+        throw const FormatException('Data akun dari server tidak valid.');
+      }
+
+      final token = data['token']?.toString();
+
+      if (token == null || token.isEmpty) {
+        throw const FormatException('Token registrasi tidak ditemukan.');
+      }
+
+      final akun = Map<String, dynamic>.from(data['akun']);
+
+      currentUser = AppUser.fromJson(akun);
+      await _saveToken(token);
+
+      _registrationDraft = null;
+
+      return AuthResult(
+        isSuccess: true,
+        message: body['message'] ?? 'Registrasi berhasil!',
+        user: currentUser,
+        token: token,
+      );
+    }
+
+    return AuthResult(
+      isSuccess: false,
+      message: _errorMessage(response),
+    );
+  } catch (e) {
+    return AuthResult(
+      isSuccess: false,
+      message: 'Gagal menghubungi server: $e',
+    );
+  }
+}
+
+  // ===================================================
+  // 3. LOGIN
+  // ===================================================
+
+  Future<AuthResult> login({
     required String email,
     required String password,
-  }) {
-    final normalizedEmail = email.trim().toLowerCase();
-    final user = _usersByEmail[normalizedEmail];
-
-    if (user == null) {
-      return AuthResult(
-        isSuccess: false,
-        message: 'Email atau kata sandi tidak sesuai.',
-      );
-    }
-
-    final expectedHash = hashPassword(password, user.salt);
-    if (expectedHash != user.passwordHash) {
-      return AuthResult(
-        isSuccess: false,
-        message: 'Email atau kata sandi tidak sesuai.',
-      );
-    }
-
-    currentUser = user;
-    return AuthResult(
-      isSuccess: true,
-      message: 'Berhasil masuk.',
-      user: user,
-    );
-  }
-
-  // =========================================================================
-  // 3. REQUEST LUPA PASSWORD
-  // =========================================================================
-  /// Memeriksa email dan membuat token reset jika email terdaftar.
-  AuthResult requestPasswordReset(String email) {
-    final normalizedEmail = email.trim().toLowerCase();
-    final user = _usersByEmail[normalizedEmail];
-
-    // Jika email tidak terdaftar
-    if (user == null) {
-      return AuthResult(
-        isSuccess: false,
-        message: 'Alamat email tidak terdaftar dalam sistem.',
-      );
-    }
-
-    // Nonaktifkan token lama milik email ini yang belum terpakai
-    for (final t in _resetTokens.where((t) => t.email == normalizedEmail && !t.isUsed)) {
-      t.isUsed = true;
-    }
-
-    // Buat token / kode reset baru dengan masa berlaku 10 menit
-    final tokenCode = _generateResetToken();
-    final now = DateTime.now();
-    final resetToken = PasswordResetToken(
-      token: tokenCode,
-      email: normalizedEmail,
-      createdAt: now,
-      expiresAt: now.add(tokenExpiryDuration),
-    );
-
-    _resetTokens.add(resetToken);
-
-    return AuthResult(
-      isSuccess: true,
-      message: 'Kode reset password berhasil dikirim ke email kamu.',
-      resetToken: tokenCode,
-      user: user,
-    );
-  }
-
-  // =========================================================================
-  // 4. VERIFIKASI TOKEN RESET PASSWORD
-  // =========================================================================
-  AuthResult verifyResetToken({
-    required String email,
-    required String token,
-  }) {
-    final normalizedEmail = email.trim().toLowerCase();
-    final cleanToken = token.trim();
-
-    // Cari token yang cocok
-    final matchingTokens = _resetTokens
-        .where((t) => t.email == normalizedEmail && t.token == cleanToken)
-        .toList();
-
-    if (matchingTokens.isEmpty) {
-      return AuthResult(
-        isSuccess: false,
-        message: 'Kode verifikasi salah atau tidak valid.',
-      );
-    }
-
-    final latestToken = matchingTokens.last;
-
-    if (latestToken.isUsed) {
-      return AuthResult(
-        isSuccess: false,
-        message: 'Kode verifikasi ini sudah pernah digunakan.',
-      );
-    }
-
-    if (latestToken.isExpired) {
-      return AuthResult(
-        isSuccess: false,
-        message: 'Kode verifikasi telah kedaluwarsa. Silakan minta kode baru.',
-      );
-    }
-
-    return AuthResult(
-      isSuccess: true,
-      message: 'Kode verifikasi valid.',
-      resetToken: cleanToken,
-    );
-  }
-
-  // =========================================================================
-  // 5. RESET / SIMPAN PASSWORD BARU
-  // =========================================================================
-  AuthResult resetPassword({
-    required String email,
-    required String token,
-    required String newPassword,
-  }) {
-    // 1. Verifikasi kembali token
-    final tokenCheck = verifyResetToken(email: email, token: token);
-    if (!tokenCheck.isSuccess) {
-      return tokenCheck;
-    }
-
-    final normalizedEmail = email.trim().toLowerCase();
-    final user = _usersByEmail[normalizedEmail];
-    if (user == null) {
-      return AuthResult(
-        isSuccess: false,
-        message: 'Akun pengguna tidak ditemukan.',
-      );
-    }
-
-    // 2. Hash password baru dengan salt baru
-    final newSalt = _generateSalt();
-    final newHash = hashPassword(newPassword, newSalt);
-
-    user.passwordHash = newHash;
-    user.salt = newSalt;
-
-    // 3. Tandai token sudah digunakan (hanya bisa 1x pakai)
-    final usedToken = _resetTokens.lastWhere(
-      (t) => t.email == normalizedEmail && t.token == token.trim(),
-    );
-    usedToken.isUsed = true;
-
-    return AuthResult(
-      isSuccess: true,
-      message: 'Kata sandi berhasil diatur ulang! Silakan masuk dengan kata sandi baru.',
-      user: user,
-    );
-  }
-
-  /// Helper untuk mengecek apakah email terdaftar
-  bool isEmailRegistered(String email) {
-    return _usersByEmail.containsKey(email.trim().toLowerCase());
-  }
-
-  /// Ambil token aktif terakhir untuk keperluan pengujian / demo
-  PasswordResetToken? getActiveToken(String email) {
-    final normalizedEmail = email.trim().toLowerCase();
+    String deviceName = 'GERAK Flutter',
+  }) async {
     try {
-      return _resetTokens.lastWhere((t) => t.email == normalizedEmail && t.isValid);
-    } catch (_) {
-      return null;
+      final response = await http.post(
+        Uri.parse('$baseUrl/login'),
+        headers: await _headers(),
+        body: jsonEncode({
+          'email': email.trim(),
+          'password': password,
+          'device_name': deviceName,
+        }),
+      );
+
+      final body = _decodeResponse(response);
+
+      if (response.statusCode == 200) {
+        final data = body['data'];
+
+        final token = data['token']?.toString();
+
+        if (token == null || token.isEmpty) {
+          return AuthResult(
+            isSuccess: false,
+            message: 'Token login tidak ditemukan.',
+          );
+        }
+
+        await _saveToken(token);
+
+        currentUser = AppUser.fromJson(
+          Map<String, dynamic>.from(data['akun']),
+        );
+
+        return AuthResult(
+          isSuccess: true,
+          message: body['message'] ?? 'Login berhasil!',
+          user: currentUser,
+          token: token,
+        );
+      }
+
+      return AuthResult(
+        isSuccess: false,
+        message: _errorMessage(response),
+      );
+    } catch (e) {
+      return AuthResult(
+        isSuccess: false,
+        message: 'Gagal menghubungi server: $e',
+      );
     }
   }
 
-  /// Buat token sengaja kedaluwarsa (untuk pengujian skenario token expired)
-  void makeTokenExpiredForTesting(String email, String token) {
-    final normalizedEmail = email.trim().toLowerCase();
-    for (final t in _resetTokens.where((t) => t.email == normalizedEmail && t.token == token)) {
-      // Ubah expiresAt ke masa lalu
-      _resetTokens[_resetTokens.indexOf(t)] = PasswordResetToken(
-        token: t.token,
-        email: t.email,
-        createdAt: t.createdAt.subtract(const Duration(hours: 1)),
-        expiresAt: DateTime.now().subtract(const Duration(minutes: 5)),
-        isUsed: t.isUsed,
+  // ===================================================
+  // 4. GET PROFILE / ME
+  // ===================================================
+
+  Future<AuthResult> me() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/me'),
+        headers: await _headers(authenticated: true),
+      );
+
+      final body = _decodeResponse(response);
+
+      if (response.statusCode == 200) {
+        final akun = body['data']['akun'];
+
+        currentUser = AppUser.fromJson(
+          Map<String, dynamic>.from(akun),
+        );
+
+        return AuthResult(
+          isSuccess: true,
+          message: body['message'] ?? 'Profil berhasil diambil!',
+          user: currentUser,
+        );
+      }
+
+      if (response.statusCode == 401) {
+        await _clearToken();
+      }
+
+      return AuthResult(
+        isSuccess: false,
+        message: _errorMessage(response),
+      );
+    } catch (e) {
+      return AuthResult(
+        isSuccess: false,
+        message: 'Gagal mengambil profil: $e',
+      );
+    }
+  }
+
+  // ===================================================
+  // 5. LOGOUT
+  // ===================================================
+
+  Future<AuthResult> logout() async {
+    try {
+      final token = await getToken();
+
+      if (token == null || token.isEmpty) {
+        await _clearToken();
+
+        return AuthResult(
+          isSuccess: true,
+          message: 'Kamu sudah logout.',
+        );
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/logout'),
+        headers: await _headers(authenticated: true),
+      );
+
+      final body = _decodeResponse(response);
+
+      if (response.statusCode == 200) {
+        await _clearToken();
+
+        return AuthResult(
+          isSuccess: true,
+          message: body['message'] ?? 'Logout berhasil!',
+        );
+      }
+
+      if (response.statusCode == 401) {
+        await _clearToken();
+      }
+
+      return AuthResult(
+        isSuccess: false,
+        message: _errorMessage(response),
+      );
+    } catch (e) {
+      return AuthResult(
+        isSuccess: false,
+        message: 'Gagal logout: $e',
       );
     }
   }
 }
-
