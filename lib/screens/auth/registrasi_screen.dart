@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/gerak_animations.dart';
 import '../theme/app_colors.dart';
 import '../utils/validators.dart';
 import '../../widgets/app_text_field.dart';
@@ -49,12 +50,11 @@ class _RegistrasiScreenState extends State<RegistrasiScreen> {
       return;
     }
 
-    if (!isValid) return;
-    if (_isSubmitting) return;
+    if (!isValid || _isSubmitting) return;
 
     setState(() => _isSubmitting = true);
     try {
-      await Future.delayed(const Duration(milliseconds: 600));
+      await Future.delayed(const Duration(milliseconds: 400));
 
       final name = _nameController.text.trim();
       final email = _emailController.text.trim();
@@ -106,142 +106,171 @@ class _RegistrasiScreenState extends State<RegistrasiScreen> {
             child: Form(
               key: _formKey,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildTopBar(),
                   const SizedBox(height: 20),
-                  _buildIntroCard(),
+                  GerakEntrance(delayMs: 50, child: _buildCenteredHeader()),
                   const SizedBox(height: 24),
 
                   // ── Nama Lengkap ──────────────────────────────────
-                  _buildFieldLabel('Nama Lengkap'),
-                  const SizedBox(height: 8),
-                  _buildShadowField(
-                    child: AppTextField(
-                      controller: _nameController,
-                      hintText: 'Nama Lengkap',
-                      prefixIcon: Icons.person_outline_rounded,
-                      textInputAction: TextInputAction.next,
-                      validator: Validators.fullName,
+                  GerakEntrance(
+                    delayMs: 120,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFieldLabel('Nama Lengkap'),
+                        const SizedBox(height: 8),
+                        _buildShadowField(
+                          child: AppTextField(
+                            controller: _nameController,
+                            hintText: 'Masukkan nama lengkap',
+                            prefixIcon: Icons.person_outline_rounded,
+                            textInputAction: TextInputAction.next,
+                            validator: Validators.fullName,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
 
                   // ── Email ─────────────────────────────────────────
-                  _buildFieldLabel('Email'),
-                  const SizedBox(height: 8),
-                  _buildShadowField(
-                    child: AppTextField(
-                      controller: _emailController,
-                      hintText: 'Email',
-                      prefixIcon: Icons.mail_outline_rounded,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      validator: Validators.email,
+                  GerakEntrance(
+                    delayMs: 180,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFieldLabel('Email'),
+                        const SizedBox(height: 8),
+                        _buildShadowField(
+                          child: AppTextField(
+                            controller: _emailController,
+                            hintText: 'contoh@gmail.com',
+                            prefixIcon: Icons.mail_outline_rounded,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            validator: Validators.email,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
 
                   // ── Password ──────────────────────────────────────
-                  _buildFieldLabel('Password'),
-                  const SizedBox(height: 8),
-                  _buildShadowField(
-                    child: AppTextField(
-                      controller: _passwordController,
-                      hintText: 'Password',
-                      prefixIcon: Icons.lock_outline_rounded,
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.next,
-                      validator: Validators.password,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                          size: 20,
-                          color: AppColors.textSecondary,
+                  GerakEntrance(
+                    delayMs: 240,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFieldLabel('Password'),
+                        const SizedBox(height: 8),
+                        _buildShadowField(
+                          child: AppTextField(
+                            controller: _passwordController,
+                            hintText: 'Minimal 8 karakter',
+                            prefixIcon: Icons.lock_outline_rounded,
+                            obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.next,
+                            validator: Validators.password,
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                size: 20,
+                                color: AppColors.textSecondary,
+                              ),
+                              onPressed: () =>
+                                  setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                          ),
                         ),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
-                      ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
 
                   // ── Konfirmasi Password ───────────────────────────
-                  _buildFieldLabel('Konfirmasi password'),
-                  const SizedBox(height: 8),
-                  _buildShadowField(
-                    highlight: true,
-                    child: AppTextField(
-                      controller: _confirmPasswordController,
-                      hintText: 'Konfirmasi Password',
-                      prefixIcon: Icons.lock_outline_rounded,
-                      obscureText: _obscureConfirmPassword,
-                      textInputAction: TextInputAction.done,
-                      validator: (value) =>
-                          Validators.confirmPassword(
-                            _passwordController.text,
-                          )(value),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureConfirmPassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                          size: 20,
-                          color: AppColors.textSecondary,
+                  GerakEntrance(
+                    delayMs: 300,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFieldLabel('Konfirmasi Password'),
+                        const SizedBox(height: 8),
+                        _buildShadowField(
+                          highlight: true,
+                          child: AppTextField(
+                            controller: _confirmPasswordController,
+                            hintText: 'Ulangi password di atas',
+                            prefixIcon: Icons.lock_outline_rounded,
+                            obscureText: _obscureConfirmPassword,
+                            textInputAction: TextInputAction.done,
+                            validator: (value) =>
+                                Validators.confirmPassword(
+                                  _passwordController.text,
+                                )(value),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureConfirmPassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                size: 20,
+                                color: AppColors.textSecondary,
+                              ),
+                              onPressed: () => setState(
+                                () => _obscureConfirmPassword =
+                                    !_obscureConfirmPassword,
+                              ),
+                            ),
+                          ),
                         ),
-                        onPressed: () => setState(
-                          () => _obscureConfirmPassword =
-                              !_obscureConfirmPassword,
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 18),
 
                   // ── Checkbox Syarat ───────────────────────────────
                   _buildTermsCheckbox(),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 24),
 
                   // ── Tombol Daftar ─────────────────────────────────
                   _buildPrimaryButton(
-                    label: 'Daftar',
+                    label: 'Lanjut ke Langkah 2',
                     isLoading: _isSubmitting,
                     onPressed: _handleRegister,
                   ),
                   const SizedBox(height: 20),
 
-                  // ── Footer ────────────────────────────────────────
-                  Center(
-                    child: RichText(
-                      text: TextSpan(
-                        style: const TextStyle(
+                  // ── Footer Rata Tengah dengan Spasi Rapi ──────────
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Sudah punya akun? ',
+                        style: TextStyle(
                           fontSize: 13.5,
                           color: AppColors.textSecondary,
                         ),
-                        children: [
-                          const TextSpan(text: 'sudah punya akun?'),
-                          WidgetSpan(
-                            child: GestureDetector(
-                              onTap: () => Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(
-                                  builder: (_) => const LoginScreen(),
-                                ),
-                              ),
-                              child: const Text(
-                                'Masuk',
-                                style: TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.link,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
-                    ),
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => const LoginScreen(),
+                          ),
+                        ),
+                        child: const Text(
+                          'Masuk',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.link,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -253,22 +282,15 @@ class _RegistrasiScreenState extends State<RegistrasiScreen> {
     );
   }
 
-  // ── Helper widgets ─────────────────────────────────────────────────
-
   Widget _buildTopBar() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Tombol back dengan shadow ringan
         _buildCircleButton(
           icon: Icons.arrow_back_rounded,
           onTap: () => Navigator.of(context).pop(),
         ),
-
-        // Chip "Langkah 1 dari 2"
         _buildStepChip('Langkah 1 dari 2'),
-
-        // Logo kecil
         Image.asset('assets/images/logo_gerak.png', width: 36, height: 36),
       ],
     );
@@ -325,74 +347,78 @@ class _RegistrasiScreenState extends State<RegistrasiScreen> {
     );
   }
 
-  Widget _buildIntroCard() {
+  /// Header & Kartu Pengantar Rata Tengah yang Seimbang
+  Widget _buildCenteredHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFFFFF8E1), Color(0xFFFFF3CD)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFE082), width: 1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFFE082), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFCA28).withValues(alpha: 0.18),
+            color: const Color(0xFFFFCA28).withValues(alpha: 0.16),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFFFFCA28).withValues(alpha: 0.25),
+              color: const Color(0xFFFFCA28).withValues(alpha: 0.28),
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.directions_run_rounded,
               color: Color(0xFFB9791C),
-              size: 20,
+              size: 24,
             ),
           ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Panduan untuk kamu yang ingin lebih berat badan',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFFB9791C),
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Buat akun baru',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Mulai perjalanan sehatmu hari ini dan catat\nsetiap langkah kemenangan.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.45,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              'Program Penurunan Berat Badan Sehat',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFB9791C),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Buat Akun Baru',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Mulai perjalanan sehatmu hari ini dan catat setiap langkah kemenanganmu bersama GERAK.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.45,
+              color: AppColors.textSecondary,
             ),
           ),
         ],
@@ -431,7 +457,7 @@ class _RegistrasiScreenState extends State<RegistrasiScreen> {
 
   Widget _buildTermsCheckbox() {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
           width: 22,
@@ -446,35 +472,32 @@ class _RegistrasiScreenState extends State<RegistrasiScreen> {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: RichText(
-              text: const TextSpan(
-                style: TextStyle(
-                  fontSize: 12.5,
-                  height: 1.5,
-                  color: AppColors.textSecondary,
-                ),
-                children: [
-                  TextSpan(text: 'Saya menyetujui '),
-                  TextSpan(
-                    text: 'Syarat & Ketentuan',
-                    style: TextStyle(
-                      color: AppColors.link,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  TextSpan(text: ' serta kebijakan '),
-                  TextSpan(
-                    text: 'Privasi',
-                    style: TextStyle(
-                      color: AppColors.link,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  TextSpan(text: ' Gerak'),
-                ],
+          child: RichText(
+            text: const TextSpan(
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.4,
+                color: AppColors.textSecondary,
               ),
+              children: [
+                TextSpan(text: 'Saya menyetujui '),
+                TextSpan(
+                  text: 'Syarat & Ketentuan',
+                  style: TextStyle(
+                    color: AppColors.link,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextSpan(text: ' serta '),
+                TextSpan(
+                  text: 'Kebijakan Privasi',
+                  style: TextStyle(
+                    color: AppColors.link,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextSpan(text: ' GERAK'),
+              ],
             ),
           ),
         ),
@@ -514,7 +537,7 @@ class _RegistrasiScreenState extends State<RegistrasiScreen> {
             : Text(
                 label,
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 15.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.3,
                 ),

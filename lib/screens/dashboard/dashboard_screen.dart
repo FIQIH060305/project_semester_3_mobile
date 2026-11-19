@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/gerak_animations.dart';
 import '../notifikasi/notifikasi_screen.dart';
 import '../profil/profil_screen.dart';
 import '../main_navigation_screen.dart';
@@ -13,15 +16,20 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final namaPengguna = 'Robit';
-  final streakHari = 10;
+  String _namaPengguna = AuthService.instance.currentUser?.name ?? 'Sobat GERAK';
+  int _langkahHariIni = 0;
+  double _kaloriHariIni = 0;
+  double _beratSekarang = AuthService.instance.currentUser?.beratBadan ?? 70.0;
+  double _beratTarget = 65.0;
+  double _sudahTurun = 0;
+  int _totalSesiBulanIni = 0;
 
-  // Daftar latihan hari ini yang dapat ditoggle
   late List<_LatihanData> latihanHariIni;
 
   @override
   void initState() {
     super.initState();
+    AuthService.instance.addListener(_onAuthChanged);
     latihanHariIni = [
       _LatihanData(
         judul: 'Jalan 30 menit',
@@ -42,6 +50,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
         selesai: false,
       ),
     ];
+    _loadDashboardFromServer();
+  }
+
+  @override
+  void dispose() {
+    AuthService.instance.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    if (!mounted) return;
+    setState(() {
+      final user = AuthService.instance.currentUser;
+      if (user != null) {
+        _namaPengguna = user.name;
+        if (user.beratBadan != null) {
+          _beratSekarang = user.beratBadan!;
+        }
+      }
+    });
+  }
+
+  Future<void> _loadDashboardFromServer() async {
+    final data = await AuthService.instance.fetchDashboardData();
+    if (!mounted || data == null) return;
+
+    setState(() {
+      final user = data['user'] as Map<String, dynamic>?;
+      final target = data['target'] as Map<String, dynamic>?;
+      final hariIni = data['hari_ini'] as Map<String, dynamic>?;
+
+      if (user != null) {
+        _namaPengguna = user['nama_lengkap']?.toString() ?? _namaPengguna;
+        _beratSekarang =
+            double.tryParse(user['berat_sekarang']?.toString() ?? '') ??
+                _beratSekarang;
+      }
+      if (target != null) {
+        _beratTarget =
+            double.tryParse(target['berat_target']?.toString() ?? '') ??
+                _beratTarget;
+        _sudahTurun =
+            double.tryParse(target['sudah_turun']?.toString() ?? '') ?? 0;
+      }
+      if (hariIni != null) {
+        _langkahHariIni =
+            int.tryParse(hariIni['langkah']?.toString() ?? '') ?? 0;
+        _kaloriHariIni =
+            double.tryParse(hariIni['kalori']?.toString() ?? '') ?? 0;
+      }
+      _totalSesiBulanIni =
+          int.tryParse(data['total_sesi_bulan_ini']?.toString() ?? '') ?? 0;
+    });
   }
 
   void _toggleSelesai(int index) {
@@ -60,97 +121,85 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ==========================================
-              // 1. HEADER (Nama & Streak)
-              // ==========================================
-              _buildHeader(),
-              const SizedBox(height: 16),
-
-              // ==========================================
-              // 2. KARTU "FOKUS PAGI"
-              // ==========================================
-              _buildFokusPagiCard(),
-              const SizedBox(height: 18),
-
-              // ==========================================
-              // 3. CARD "LATIHAN HARI INI"
-              // ==========================================
-              _buildLatihanCard(),
-              const SizedBox(height: 16),
-
-              // ==========================================
-              // 4. STAT CARD (LANGKAH & KALORI)
-              // ==========================================
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildLangkahCard(),
+        child: RefreshIndicator(
+          color: const Color(0xFF1D5FC9),
+          onRefresh: _loadDashboardFromServer,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GerakEntrance(delayMs: 0, child: _buildHeader()),
+                const SizedBox(height: 16),
+                GerakEntrance(delayMs: 80, child: _buildFokusPagiCard()),
+                const SizedBox(height: 18),
+                GerakEntrance(delayMs: 160, child: _buildLatihanCard()),
+                const SizedBox(height: 16),
+                GerakEntrance(
+                  delayMs: 240,
+                  child: Row(
+                    children: [
+                      Expanded(child: _buildLangkahCard()),
+                      const SizedBox(width: 14),
+                      Expanded(child: _buildKaloriCard()),
+                    ],
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: _buildKaloriCard(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // ==========================================
-              // 5. CARD "BERAT BADAN"
-              // ==========================================
-              _buildBeratBadanCard(),
-              const SizedBox(height: 16),
-            ],
+                ),
+                const SizedBox(height: 16),
+                GerakEntrance(delayMs: 320, child: _buildBeratBadanCard()),
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: widget.showBottomNav ? const AppBottomNavBar(currentIndex: 0) : null,
+      bottomNavigationBar:
+          widget.showBottomNav ? const AppBottomNavBar(currentIndex: 0) : null,
     );
   }
 
-  // ── 1. HEADER ────────────────────────────────────────────────────────
   Widget _buildHeader() {
+    final photoPath = AuthService.instance.currentUser?.photoPath;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  'Hai, $namaPengguna',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF1F2937),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Hai, $_namaPengguna',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                const Text(
-                  '👋',
-                  style: TextStyle(fontSize: 20),
-                ),
-              ],
-            ),
-            const SizedBox(height: 3),
-            const Text(
-              'Semangat jaga kesehatan!',
-              style: TextStyle(
-                color: Color(0xFF374151),
-                fontSize: 13.5,
-                fontWeight: FontWeight.w500,
+                  const SizedBox(width: 6),
+                  const Text('👋', style: TextStyle(fontSize: 20)),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 3),
+              const Text(
+                'Semangat jaga kesehatan!',
+                style: TextStyle(
+                  color: Color(0xFF374151),
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
-
-        // Badge Streak + Avatar Profil
         Row(
           children: [
             Container(
@@ -165,7 +214,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const Text('🔥', style: TextStyle(fontSize: 14)),
                   const SizedBox(width: 5),
                   Text(
-                    '$streakHari Hari',
+                    '$_totalSesiBulanIni Sesi',
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 12.5,
@@ -176,12 +225,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            // Avatar kecil → navigasi ke Profil
             GestureDetector(
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ProfilScreen()),
-                );
+                final nav = MainNavigationController.of(context);
+                if (nav != null) {
+                  nav.switchTab(4);
+                } else {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ProfilScreen()),
+                  );
+                }
               },
               child: Container(
                 width: 38,
@@ -191,18 +244,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   border: Border.all(color: const Color(0xFF2F80ED), width: 2),
                 ),
                 child: ClipOval(
-                  child: Image.asset(
-                    'assets/images/profile_user.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: const Color(0xFFDBEAFE),
-                      child: const Icon(
-                        Icons.person_rounded,
-                        color: Color(0xFF2F80ED),
-                        size: 20,
-                      ),
-                    ),
-                  ),
+                  child: _buildHeaderAvatar(photoPath),
                 ),
               ),
             ),
@@ -212,111 +254,130 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── 2. FOKUS PAGI CARD ───────────────────────────────────────────────
-  Widget _buildFokusPagiCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF5697F8), Color(0xFF1D5FC9)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1D5FC9).withValues(alpha: 0.35),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'FOKUS PAGI',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Bersiap capai 5KM Pertamamu!',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16.5,
-                ),
-              ),
-            ],
-          ),
+  Widget _buildHeaderAvatar(String? photoPath) {
+    if (photoPath != null && photoPath.isNotEmpty) {
+      if (photoPath.startsWith('http')) {
+        return Image.network(
+          photoPath,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _buildFallbackHeaderAvatar(),
+        );
+      }
+      final file = File(photoPath);
+      if (file.existsSync()) {
+        return Image.file(
+          file,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _buildFallbackHeaderAvatar(),
+        );
+      }
+    }
+    return _buildFallbackHeaderAvatar();
+  }
 
-          // Icon Lonceng Notifikasi di pojok kanan
-          Positioned(
-            right: 0,
-            top: 2,
-            child: GestureDetector(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => const NotifikasiScreen()),
-                );
-              },
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(
-                    Icons.notifications_rounded,
-                    color: Colors.white.withValues(alpha: 0.8),
-                    size: 38,
-                  ),
-                  Positioned(
-                    right: -2,
-                    top: -2,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 3, vertical: 1),
-                      child: Text(
-                        '99+',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+  Widget _buildFallbackHeaderAvatar() {
+    return Image.asset(
+      'assets/images/profile_user.png',
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => Container(
+        color: const Color(0xFFDBEAFE),
+        child: const Icon(
+          Icons.person_rounded,
+          color: Color(0xFF2F80ED),
+          size: 20,
+        ),
       ),
     );
   }
 
-  // ── 3. LATIHAN HARI INI CARD ─────────────────────────────────────────
+  Widget _buildFokusPagiCard() {
+    return GestureDetector(
+      onTap: () {
+        final nav = MainNavigationController.of(context);
+        if (nav != null) nav.switchTab(2); // Langsung arahkan ke tab Tracking
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF5697F8), Color(0xFF1D5FC9)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1D5FC9).withValues(alpha: 0.35),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    GerakPulseBeacon(
+                      pulseColor: Colors.white,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'FOKUS HARI INI • KETUK MULAI LARI',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.5,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Bersiap capai 5KM Pertamamu!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16.5,
+                  ),
+                ),
+              ],
+            ),
+            Positioned(
+              right: 0,
+              top: 2,
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const NotifikasiScreen()),
+                  );
+                },
+                child: Icon(
+                  Icons.notifications_rounded,
+                  color: Colors.white.withValues(alpha: 0.85),
+                  size: 34,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildLatihanCard() {
     return Container(
       width: double.infinity,
@@ -336,7 +397,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Latihan
           Row(
             children: [
               Transform.rotate(
@@ -359,8 +419,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 14),
-
-          // List item
           ...List.generate(latihanHariIni.length, (index) {
             final item = latihanHariIni[index];
             return Padding(
@@ -368,18 +426,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   bottom: index < latihanHariIni.length - 1 ? 10 : 0),
               child: GestureDetector(
                 onTap: () => _toggleSelesai(index),
-                child: Container(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
                   width: double.infinity,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFD6EEFF),
+                    color: item.selesai
+                        ? const Color(0xFFD6EEFF)
+                        : const Color(0xFFF1F7FF),
                     borderRadius: BorderRadius.circular(26),
                   ),
                   child: Row(
                     children: [
-                      // Checklist Box
-                      Container(
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
                         width: 22,
                         height: 22,
                         decoration: BoxDecoration(
@@ -403,18 +465,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             : null,
                       ),
                       const SizedBox(width: 14),
-
-                      // Judul & Jam
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               item.judul,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 13.5,
-                                color: Color(0xFF1F2937),
+                                decoration: item.selesai
+                                    ? TextDecoration.lineThrough
+                                    : TextDecoration.none,
+                                color: const Color(0xFF1F2937),
                               ),
                             ),
                             const SizedBox(height: 1),
@@ -429,13 +492,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ],
                         ),
                       ),
-
-                      // Badge Kapsul Status
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 5),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8DC8FF),
+                          color: item.selesai
+                              ? const Color(0xFF8DC8FF)
+                              : const Color(0xFFDBEAFE),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Text(
@@ -458,8 +521,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── 4. CARD LANGKAH ──────────────────────────────────────────────────
   Widget _buildLangkahCard() {
+    final ratio = (_langkahHariIni / 10000).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -488,19 +551,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          const Text(
-            '1000',
-            style: TextStyle(
+          GerakAnimatedMetric(
+            targetValue: _langkahHariIni.toDouble(),
+            style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w900,
               color: Color(0xFF1F2937),
             ),
           ),
           const SizedBox(height: 8),
-
-          // Progress bar
-          _buildPillProgressBar(ratio: 0.1),
-
+          _buildPillProgressBar(ratio: ratio),
           const SizedBox(height: 6),
           const Text(
             'Target 10,000',
@@ -515,8 +575,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── 4. CARD KALORI ───────────────────────────────────────────────────
   Widget _buildKaloriCard() {
+    final ratio = (_kaloriHariIni / 600).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -527,15 +587,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.local_fire_department_rounded,
                 color: Color(0xFFFF9800),
                 size: 22,
               ),
-              const SizedBox(width: 4),
-              const Text(
+              SizedBox(width: 4),
+              Text(
                 'Kalori',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
@@ -546,22 +606,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          const Text(
-            '1000',
-            style: TextStyle(
-              fontSize: 22,
+          GerakAnimatedMetric(
+            targetValue: _kaloriHariIni,
+            suffix: ' kcal',
+            style: const TextStyle(
+              fontSize: 20,
               fontWeight: FontWeight.w900,
               color: Color(0xFF1F2937),
             ),
           ),
           const SizedBox(height: 8),
-
-          // Progress bar
-          _buildPillProgressBar(ratio: 0.1),
-
+          _buildPillProgressBar(ratio: ratio),
           const SizedBox(height: 6),
           const Text(
-            'Target 10,000',
+            'Target 600 kcal',
             style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
@@ -585,21 +643,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
           width: 0.8,
         ),
       ),
-      child: FractionallySizedBox(
-        alignment: Alignment.centerLeft,
-        widthFactor: ratio.clamp(0.0, 1.0),
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E60D0),
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0, end: ratio.clamp(0.0, 1.0)),
+        duration: const Duration(milliseconds: 900),
+        curve: Curves.easeOutCubic,
+        builder: (context, animatedRatio, _) {
+          return FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: animatedRatio,
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E60D0),
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  // ── 5. CARD BERAT BADAN ──────────────────────────────────────────────
   Widget _buildBeratBadanCard() {
+    final statusTurun = _sudahTurun >= 0
+        ? '-${_sudahTurun.toStringAsFixed(1)} kg progres'
+        : '+${_sudahTurun.abs().toStringAsFixed(1)} kg dari awal';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -620,8 +688,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text(
+            children: [
+              const Text(
                 'Berat badan',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
@@ -630,8 +698,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               Text(
-                '-1,5 kg minggu ini',
-                style: TextStyle(
+                statusTurun,
+                style: const TextStyle(
                   color: Color(0xFF22C55E),
                   fontWeight: FontWeight.w700,
                   fontSize: 11.5,
@@ -640,22 +708,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 4),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: const [
+            children: [
               Text(
-                '90,5 kg',
-                style: TextStyle(
+                '${_beratSekarang.toStringAsFixed(1)} kg',
+                style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w900,
                   color: Color(0xFF1F2937),
                 ),
               ),
               Text(
-                'Target 75 kg',
-                style: TextStyle(
+                'Target ${_beratTarget.toStringAsFixed(0)} kg',
+                style: const TextStyle(
                   color: Color(0xFF9CA3AF),
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
@@ -664,22 +731,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 10),
-
-          // Grafik Garis Tren Menurun
           SizedBox(
             height: 36,
             width: double.infinity,
-            child: CustomPaint(
-              painter: _TrendLinePainter(),
-            ),
+            child: CustomPaint(painter: _TrendLinePainter()),
           ),
           const SizedBox(height: 6),
-
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
+            children: [
               Text(
-                '1 minggu lalu',
+                'Awal program',
                 style: TextStyle(
                   fontSize: 11,
                   color: Color(0xFF9CA3AF),
@@ -702,7 +764,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-// ── DATA MODEL LATIHAN ──────────────────────────────────────────────────
 class _LatihanData {
   String judul;
   String waktu;
@@ -717,7 +778,6 @@ class _LatihanData {
   });
 }
 
-// ── CUSTOM PAINTER UNTUK ICON SEPATU (SNEAKER OUTLINE) ──────────────────
 class _SneakerIconPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -729,7 +789,6 @@ class _SneakerIconPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
 
     final path = Path();
-    // Gambar outline sneaker sederhana miring
     path.moveTo(size.width * 0.15, size.height * 0.25);
     path.lineTo(size.width * 0.35, size.height * 0.1);
     path.lineTo(size.width * 0.55, size.height * 0.45);
@@ -750,7 +809,6 @@ class _SneakerIconPainter extends CustomPainter {
 
     canvas.drawPath(path, paint);
 
-    // Garis tali sepatu
     final lacePaint = Paint()
       ..color = const Color(0xFF1F2937)
       ..strokeWidth = 1.3
@@ -766,7 +824,6 @@ class _SneakerIconPainter extends CustomPainter {
       Offset(size.width * 0.55, size.height * 0.58),
       lacePaint,
     );
-    // Sol bawah
     canvas.drawLine(
       Offset(size.width * 0.1, size.height * 0.95),
       Offset(size.width * 0.85, size.height * 0.95),
@@ -778,7 +835,6 @@ class _SneakerIconPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// ── CUSTOM PAINTER UNTUK GARIS TREN MENURUN ─────────────────────────────
 class _TrendLinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -789,7 +845,6 @@ class _TrendLinePainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final path = Path();
-    // Garis miring halus dari kiri atas ke kanan bawah
     path.moveTo(size.width * 0.12, size.height * 0.3);
     path.lineTo(size.width * 0.88, size.height * 0.85);
 

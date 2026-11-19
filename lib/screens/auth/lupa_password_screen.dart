@@ -39,15 +39,12 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      await Future.delayed(const Duration(milliseconds: 700));
-
       final email = _emailController.text.trim();
-      final result = AuthService.instance.requestPasswordReset(email);
+      final result = await AuthService.instance.requestPasswordReset(email);
 
       if (!mounted) return;
 
       if (!result.isSuccess) {
-        // Email tidak terdaftar dalam sistem
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -65,25 +62,24 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
         return;
       }
 
-      // Berhasil mengirim token / kode reset
-      final token = result.resetToken ?? '';
-
-      // Tampilkan dialog info pengiriman kode verifikasi
+      // Tampilkan dialog konfirmasi bahwa kode OTP telah dikirim ke email pengguna
       await showDialog(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: const [
+          title: const Row(
+            children: [
               Icon(Icons.mark_email_read_outlined, color: AppColors.primary, size: 28),
               SizedBox(width: 10),
-              Text(
-                'Kode Terkirim',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+              Expanded(
+                child: Text(
+                  'Kode Terkirim ke Email',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
             ],
@@ -93,43 +89,36 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Instruksi dan kode reset password telah dikirim ke:\n$email',
-                style: const TextStyle(fontSize: 13.5, color: AppColors.textSecondary, height: 1.4),
+                'Kami telah mengirimkan 6 digit kode verifikasi (OTP) ke alamat email:\n$email',
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEEF2FF),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                 ),
-                child: Column(
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'KODE VERIFIKASI RESET:',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textSecondary,
-                        letterSpacing: 0.5,
+                    Icon(Icons.info_outline_rounded, size: 18, color: AppColors.primary),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Periksa kotak masuk atau folder Spam email kamu. Kode berlaku selama 15 menit dan hanya dapat digunakan 1 kali.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: AppColors.textPrimary,
+                          height: 1.4,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      token,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 6,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Berlaku selama 10 menit (1 kali pakai)',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
                     ),
                   ],
                 ),
@@ -142,13 +131,9 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
               child: ElevatedButton(
                 onPressed: () {
                   Navigator.of(ctx).pop();
-                  // Arahkan ke Halaman Reset Password dengan email & token otomatis
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => ResetPasswordScreen(
-                        email: email,
-                        initialToken: token,
-                      ),
+                      builder: (_) => ResetPasswordScreen(email: email),
                     ),
                   );
                 },
@@ -158,7 +143,7 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 child: const Text(
-                  'Lanjut Reset Password',
+                  'Masukkan Kode Verifikasi',
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -201,8 +186,6 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 12),
-
-                  // Logo
                   Center(
                     child: Image.asset(
                       'assets/images/logo_gerak.png',
@@ -216,8 +199,6 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // Judul & Deskripsi
                   const Text(
                     'Lupa Kata Sandi? 🔒',
                     style: TextStyle(
@@ -228,7 +209,7 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Masukkan alamat email akun kamu. Kami akan mengirimkan tautan dan kode verifikasi untuk mengatur ulang kata sandi.',
+                    'Masukkan alamat email akun kamu. Kami akan mengirimkan 6 digit kode verifikasi ke email tersebut untuk mengatur ulang kata sandi.',
                     style: TextStyle(
                       fontSize: 13.5,
                       height: 1.5,
@@ -236,8 +217,6 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
                     ),
                   ),
                   const SizedBox(height: 28),
-
-                  // Input Alamat Email
                   const Text(
                     'Alamat Email',
                     style: TextStyle(
@@ -268,8 +247,6 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
                     ),
                   ),
                   const SizedBox(height: 28),
-
-                  // Tombol Kirim Link Reset Password
                   SizedBox(
                     width: double.infinity,
                     height: 52,
@@ -295,7 +272,7 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
                               ),
                             )
                           : const Text(
-                              'Kirim Link Reset Password',
+                              'Kirim Kode Verifikasi',
                               style: TextStyle(
                                 fontSize: 15.5,
                                 fontWeight: FontWeight.w700,
@@ -305,14 +282,12 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // Footer Kembali ke Login
                   Center(
                     child: GestureDetector(
                       onTap: () => Navigator.of(context).pop(),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
+                        children: [
                           Icon(Icons.arrow_back_rounded, size: 16, color: AppColors.link),
                           SizedBox(width: 6),
                           Text(
@@ -337,4 +312,3 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
     );
   }
 }
-

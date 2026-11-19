@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import '../../core/app_typography.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/app_text_field.dart';
+import '../../widgets/gerak_animations.dart';
+import '../main_navigation_screen.dart';
 import '../theme/app_colors.dart';
 import '../utils/validators.dart';
-import '../../widgets/app_text_field.dart';
 import 'lupa_password_screen.dart';
 import 'registrasi_screen.dart';
-import 'splash_screen.dart';
-import '../dashboard/dashboard_screen.dart';
-import '../main_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -22,7 +22,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
-  bool _rememberMe = false;
+  bool _rememberMe = true;
   bool _isSubmitting = false;
 
   @override
@@ -35,17 +35,14 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleLogin() async {
     FocusScope.of(context).unfocus();
     final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) return;
-    if (_isSubmitting) return;
+    if (!isValid || _isSubmitting) return;
 
     setState(() => _isSubmitting = true);
     try {
-      await Future.delayed(const Duration(milliseconds: 600));
-
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      final result = AuthService.instance.login(
+      final result = await AuthService.instance.login(
         email: email,
         password: password,
       );
@@ -101,187 +98,208 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 36),
-
-                  // ── Logo ──────────────────────────────────────────
-                  Center(
-                    child: Image.asset(
-                      'assets/images/logo_gerak.png',
-                      width: 100,
-                      height: 100,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-
-                  // ── Judul ─────────────────────────────────────────
-                  const Text(
-                    'Selamat datang 👋',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Masuk untuk melanjutkan perjalanan dan\npantau target kebugaranmu',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      height: 1.5,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-
-                  // ── Field Email ───────────────────────────────────
-                  _buildFieldLabel('Alamat Email'),
-                  const SizedBox(height: 8),
-                  _buildShadowField(
-                    child: AppTextField(
-                      controller: _emailController,
-                      hintText: 'Nama@gmail.com',
-                      prefixIcon: Icons.mail_outline_rounded,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      validator: Validators.email,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // ── Field Password ────────────────────────────────
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildFieldLabel('Kata Sandi'),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => LupaPasswordScreen(
-                                initialEmail: _emailController.text.trim(),
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Lupa Password?',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.link,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _buildShadowField(
-                    child: AppTextField(
-                      controller: _passwordController,
-                      hintText: 'Password',
-                      prefixIcon: Icons.lock_outline_rounded,
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      validator: Validators.password,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                          size: 20,
-                          color: AppColors.textSecondary,
-                        ),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-
-                  // ── Hint "Ingat saya" ─────────────────────────────
-                  const Text(
-                    'Ingat saya di perangkat ini',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: Checkbox(
-                          value: _rememberMe,
-                          activeColor: AppColors.checkboxActive,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          side: const BorderSide(
-                            color: AppColors.divider,
-                            width: 1.5,
-                          ),
-                          onChanged: (v) =>
-                              setState(() => _rememberMe = v ?? false),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 26),
-
-                  // ── Tombol Masuk ──────────────────────────────────
-                  _buildPrimaryButton(
-                    label: 'Masuk',
-                    isLoading: _isSubmitting,
-                    onPressed: _handleLogin,
-                  ),
-                  const SizedBox(height: 22),
-
-                  // ── Divider ───────────────────────────────────────
-                  _buildDivider('ATAU MASUK DENGAN'),
-                  const SizedBox(height: 18),
-
-                  // ── Tombol Google ─────────────────────────────────
-                  _buildGoogleButton(),
-                  const SizedBox(height: 32),
-
-                  // ── Footer ────────────────────────────────────────
-                  Center(
-                    child: RichText(
-                      text: TextSpan(
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          color: AppColors.textSecondary,
-                        ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ── Logo & Header Rata Tengah ─────────────────────
+                    GerakEntrance(
+                      delayMs: 0,
+                      child: Column(
                         children: [
-                          const TextSpan(text: 'Belum punya akun?'),
-                          WidgetSpan(
-                            child: GestureDetector(
-                              onTap: _goToRegister,
-                              child: const Text(
-                                'Daftar',
-                                style: TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.link,
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(alpha: 0.12),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 6),
                                 ),
+                              ],
+                            ),
+                            child: Image.asset(
+                              'assets/images/logo_gerak.png',
+                              width: 78,
+                              height: 78,
+                            ),
+                          ),
+                          const SizedBox(height: 22),
+                          Text(
+                            'Selamat Datang 👋',
+                            textAlign: TextAlign.center,
+                            style: AppTypography.pageTitle,
+                          ),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              'Masuk untuk melanjutkan perjalanan dan pantau target kebugaranmu bersama GERAK',
+                              textAlign: TextAlign.center,
+                              style: AppTypography.pageSubtitle,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+
+                    // ── Field Email ───────────────────────────────────
+                    GerakEntrance(
+                      delayMs: 100,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Alamat Email', style: AppTypography.fieldLabel),
+                          const SizedBox(height: 8),
+                          _buildShadowField(
+                            child: AppTextField(
+                              controller: _emailController,
+                              hintText: 'contoh@gmail.com',
+                              prefixIcon: Icons.mail_outline_rounded,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              validator: Validators.email,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // ── Field Password ────────────────────────────────
+                    GerakEntrance(
+                      delayMs: 180,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Kata Sandi', style: AppTypography.fieldLabel),
+                          const SizedBox(height: 8),
+                          _buildShadowField(
+                            child: AppTextField(
+                              controller: _passwordController,
+                              hintText: 'Masukkan kata sandi',
+                              prefixIcon: Icons.lock_outline_rounded,
+                              obscureText: _obscurePassword,
+                              textInputAction: TextInputAction.done,
+                              validator: Validators.password,
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  size: 20,
+                                  color: AppColors.textSecondary,
+                                ),
+                                onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword),
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                    const SizedBox(height: 12),
+
+                    // ── Baris Sejajar: Ingat Saya & Lupa Password ─────
+                    GerakEntrance(
+                      delayMs: 240,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          GestureDetector(
+                            onTap: () =>
+                                setState(() => _rememberMe = !_rememberMe),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: Checkbox(
+                                    value: _rememberMe,
+                                    activeColor: AppColors.checkboxActive,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    side: const BorderSide(
+                                      color: AppColors.divider,
+                                      width: 1.5,
+                                    ),
+                                    onChanged: (v) => setState(
+                                        () => _rememberMe = v ?? false),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Ingat saya',
+                                  style: AppTypography.pageSubtitle.copyWith(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => LupaPasswordScreen(
+                                    initialEmail: _emailController.text.trim(),
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Text(
+                              'Lupa Password?',
+                              style: AppTypography.linkText.copyWith(fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // ── Tombol Masuk ──────────────────────────────────
+                    GerakEntrance(
+                      delayMs: 300,
+                      child: _buildPrimaryButton(
+                        label: 'Masuk',
+                        isLoading: _isSubmitting,
+                        onPressed: _handleLogin,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // ── Footer Rata Tengah ────────────────────────────
+                    GerakEntrance(
+                      delayMs: 360,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Belum punya akun? ',
+                            style: AppTypography.pageSubtitle,
+                          ),
+                          GestureDetector(
+                            onTap: _goToRegister,
+                            child: Text(
+                              'Daftar Sekarang',
+                              style: AppTypography.linkText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -290,20 +308,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // ── Helper widgets ─────────────────────────────────────────────────
-
-  Widget _buildFieldLabel(String label) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 13.5,
-        fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
-      ),
-    );
-  }
-
-  /// Membungkus field dengan shadow halus agar terlihat lebih material.
   Widget _buildShadowField({required Widget child}) {
     return Container(
       decoration: BoxDecoration(
@@ -351,92 +355,8 @@ class _LoginScreenState extends State<LoginScreen> {
               )
             : Text(
                 label,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
-                ),
+                style: AppTypography.textTheme.labelLarge,
               ),
-      ),
-    );
-  }
-
-  Widget _buildDivider(String text) {
-    return Row(
-      children: [
-        const Expanded(child: Divider(color: AppColors.divider, thickness: 1)),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text(
-            text,
-            style: const TextStyle(
-              fontSize: 11,
-              letterSpacing: 0.6,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ),
-        const Expanded(child: Divider(color: AppColors.divider, thickness: 1)),
-      ],
-    );
-  }
-
-  Widget _buildGoogleButton() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: OutlinedButton(
-          onPressed: () {
-            // TODO: integrasi Google Sign-In.
-          },
-          style: OutlinedButton.styleFrom(
-            side: const BorderSide(color: Color(0xFFE8E8E8), width: 1),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(30),
-            ),
-            backgroundColor: Colors.white,
-            foregroundColor: AppColors.textPrimary,
-            padding: EdgeInsets.zero,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Google "G" berwarna dari teks
-              RichText(
-                text: const TextSpan(
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  children: [
-                    TextSpan(
-                      text: 'G',
-                      style: TextStyle(color: Color(0xFF4285F4)),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'Google',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

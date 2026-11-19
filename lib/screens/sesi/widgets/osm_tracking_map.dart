@@ -29,7 +29,7 @@ class OsmTrackingMap extends StatefulWidget {
 class _OsmTrackingMapState extends State<OsmTrackingMap> {
   late final MapController _mapController;
 
-  // Default titik awal (misal jika GPS belum didapat: Jember/Indonesia)
+  // Default titik awal (Jember, Indonesia)
   static const LatLng _defaultCenter = LatLng(-8.1724, 113.7007);
 
   @override
@@ -41,7 +41,6 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
   @override
   void didUpdateWidget(covariant OsmTrackingMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Jika followUser aktif dan ada pembaruan posisi, geser kamera ke posisi terbaru
     if (widget.followUser && widget.posisiSaatIni != null) {
       if (oldWidget.posisiSaatIni != widget.posisiSaatIni) {
         _mapController.move(widget.posisiSaatIni!, _mapController.camera.zoom);
@@ -96,7 +95,6 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
 
               // 2. Polyline Rute Jejak Perjalanan
               if (widget.rutePoints.length > 1) ...[
-                // Outer shadow polyline (outline merah tua)
                 PolylineLayer(
                   polylines: [
                     Polyline(
@@ -106,11 +104,10 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
                       strokeCap: StrokeCap.round,
                       strokeJoin: StrokeJoin.round,
                     ),
-                    // Inner bright crimson polyline
                     Polyline(
                       points: widget.rutePoints,
                       strokeWidth: 5.0,
-                      color: const Color(0xFFDC2626), // Vibrant red
+                      color: const Color(0xFFDC2626),
                       strokeCap: StrokeCap.round,
                       strokeJoin: StrokeJoin.round,
                     ),
@@ -121,7 +118,6 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
               // 3. Markers: Titik Awal & Posisi Real-time Saat Ini
               MarkerLayer(
                 markers: [
-                  // Penanda Titik Awal (Start Marker)
                   if (widget.posisiAwal != null)
                     Marker(
                       point: widget.posisiAwal!,
@@ -129,7 +125,7 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
                       height: 36,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFF10B981), // Green
+                          color: const Color(0xFF10B981),
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 2.5),
                           boxShadow: [
@@ -147,8 +143,6 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
                         ),
                       ),
                     ),
-
-                  // Penanda Posisi Terakhir / Real-time (GPS Beacon)
                   if (widget.posisiSaatIni != null)
                     Marker(
                       point: widget.posisiSaatIni!,
@@ -162,7 +156,6 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
           ),
 
           // ── Tombol Kontrol Peta (Kiri Atas & Kanan Atas) ─────────────────
-          // Tombol Perbesar / Mode Fullscreen (Kiri Atas)
           Positioned(
             top: 14,
             left: 14,
@@ -191,11 +184,11 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
             ),
           ),
 
-          // Tombol Re-center / GPS Tracking Lock (Kanan Atas)
           Positioned(
             top: 14,
             right: 14,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 GestureDetector(
                   onTap: _centerToLocation,
@@ -223,8 +216,6 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
                   ),
                 ),
                 const SizedBox(height: 8),
-
-                // Tombol Zoom In
                 GestureDetector(
                   onTap: _zoomIn,
                   child: Container(
@@ -244,8 +235,6 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
                   ),
                 ),
                 const SizedBox(height: 4),
-
-                // Tombol Zoom Out
                 GestureDetector(
                   onTap: _zoomOut,
                   child: Container(
@@ -268,22 +257,28 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
             ),
           ),
 
-          // ── Attribution OpenStreetMap ─────────────────────────────────
+          // ── Attribution OpenStreetMap (Responsif) ────────────────────
           Positioned(
             left: 12,
+            right: 12,
             bottom: 4,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                '© OpenStreetMap contributors',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: Color(0xFF475569),
-                  fontWeight: FontWeight.w600,
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  '© OpenStreetMap contributors',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: Color(0xFF475569),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -293,12 +288,10 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
     );
   }
 
-  /// Marker animasi posisi saat ini
   Widget _buildCurrentLocationMarker() {
     return Stack(
       alignment: Alignment.center,
       children: [
-        // Outer pulsing ring
         Container(
           width: 46,
           height: 46,
@@ -307,7 +300,6 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
             shape: BoxShape.circle,
           ),
         ),
-        // Inner blue circle
         Container(
           width: 24,
           height: 24,
@@ -335,4 +327,3 @@ class _OsmTrackingMapState extends State<OsmTrackingMap> {
     );
   }
 }
-

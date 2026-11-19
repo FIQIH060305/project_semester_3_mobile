@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/gerak_animations.dart';
+import '../main_navigation_screen.dart';
 import 'edit_profil_screen.dart';
 
 class ProfilScreen extends StatefulWidget {
@@ -17,11 +19,21 @@ class _ProfilScreenState extends State<ProfilScreen> {
   final ImagePicker _picker = ImagePicker();
   late final AuthService _authService;
 
+  double _totalJarakKm = 0.0;
+  int _totalSesi = 0;
+  double _totalKalori = 0.0;
+  double _beratAwal = 75.0;
+  double _beratSekarang = 72.0;
+  double _beratTarget = 65.0;
+  int _progresPersen = 0;
+  bool _isUploadingPhoto = false;
+
   @override
   void initState() {
     super.initState();
     _authService = AuthService.instance;
     _authService.addListener(_onAuthChanged);
+    _loadProfilStats();
   }
 
   @override
@@ -34,16 +46,54 @@ class _ProfilScreenState extends State<ProfilScreen> {
     if (mounted) setState(() {});
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // 1. LOGIKA LOGOUT
-  // ─────────────────────────────────────────────────────────────────────
+  Future<void> _loadProfilStats() async {
+    final dash = await _authService.fetchDashboardData();
+    final riwayat = await _authService.fetchRiwayatOlahraga();
+
+    if (!mounted) return;
+
+    double jarak = 0;
+    double kalori = 0;
+    for (final item in riwayat) {
+      jarak += double.tryParse(item['jarak_km']?.toString() ?? '0') ?? 0;
+      kalori += double.tryParse(item['kalori_terbakar']?.toString() ?? '0') ?? 0;
+    }
+
+    setState(() {
+      _totalJarakKm = jarak;
+      _totalSesi = riwayat.length;
+      _totalKalori = kalori;
+
+      if (dash != null) {
+        final user = dash['user'] as Map<String, dynamic>?;
+        final target = dash['target'] as Map<String, dynamic>?;
+
+        if (user != null) {
+          _beratSekarang =
+              double.tryParse(user['berat_sekarang']?.toString() ?? '') ??
+                  _beratSekarang;
+        }
+        if (target != null) {
+          _beratAwal =
+              double.tryParse(target['berat_awal']?.toString() ?? '') ??
+                  _beratAwal;
+          _beratTarget =
+              double.tryParse(target['berat_target']?.toString() ?? '') ??
+                  _beratTarget;
+          _progresPersen =
+              int.tryParse(target['progres_persen']?.toString() ?? '') ?? 0;
+        }
+      }
+    });
+  }
+
   Future<void> _konfirmasiLogout() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 24),
             SizedBox(width: 10),
             Text(
@@ -97,35 +147,31 @@ class _ProfilScreenState extends State<ProfilScreen> {
     );
 
     if (confirmed == true) {
-      // 1. Hapus sesi autentikasi
-      _authService.logout();
+      await _authService.logout();
 
       if (!mounted) return;
 
-      // 2. Tampilkan notifikasi
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Row(
-            children: const [
-              Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 20),
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_outline_rounded,
+                  color: Colors.white, size: 20),
               SizedBox(width: 10),
               Expanded(child: Text('Anda telah berhasil keluar.')),
             ],
           ),
           backgroundColor: const Color(0xFF334155),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
 
-      // 3. Arahkan kembali ke halaman Login dan hapus seluruh riwayat navigasi
       Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // 2. LOGIKA PILIH FOTO DARI KAMERA / GALERI
-  // ─────────────────────────────────────────────────────────────────────
   Future<void> _pilihSumberFoto() async {
     showModalBottomSheet(
       context: context,
@@ -168,11 +214,13 @@ class _ProfilScreenState extends State<ProfilScreen> {
                       color: const Color(0xFFE8F1FF),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.photo_library_rounded, color: Color(0xFF0077E6)),
+                    child: const Icon(Icons.photo_library_rounded,
+                        color: Color(0xFF0077E6)),
                   ),
                   title: const Text(
                     'Pilih dari Galeri',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
                   ),
                   onTap: () {
                     Navigator.of(ctx).pop();
@@ -186,11 +234,13 @@ class _ProfilScreenState extends State<ProfilScreen> {
                       color: const Color(0xFFE8F1FF),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.camera_alt_rounded, color: Color(0xFF0077E6)),
+                    child: const Icon(Icons.camera_alt_rounded,
+                        color: Color(0xFF0077E6)),
                   ),
                   title: const Text(
                     'Ambil Foto dari Kamera',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
                   ),
                   onTap: () {
                     Navigator.of(ctx).pop();
@@ -205,7 +255,8 @@ class _ProfilScreenState extends State<ProfilScreen> {
                         color: const Color(0xFFFFE1E1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
+                      child: const Icon(Icons.delete_outline_rounded,
+                          color: Color(0xFFEF4444)),
                     ),
                     title: const Text(
                       'Kembalikan Foto Bawaan',
@@ -215,9 +266,18 @@ class _ProfilScreenState extends State<ProfilScreen> {
                         color: Color(0xFFEF4444),
                       ),
                     ),
-                    onTap: () {
+                    onTap: () async {
                       Navigator.of(ctx).pop();
-                      _authService.updateProfile(photoPath: '');
+                      setState(() => _isUploadingPhoto = true);
+                      final user = _authService.currentUser;
+                      await _authService.syncProfileUpdateToServer(
+                        namaLengkap: user?.name ?? 'Sobat GERAK',
+                        tinggiBadan: user?.tinggiBadan ?? 170,
+                        beratBadan: _beratSekarang,
+                        beratTarget: _beratTarget,
+                        photoPath: '',
+                      );
+                      if (mounted) setState(() => _isUploadingPhoto = false);
                     },
                   ),
               ],
@@ -238,29 +298,50 @@ class _ProfilScreenState extends State<ProfilScreen> {
       );
 
       if (pickedFile != null) {
-        _authService.updateProfile(photoPath: pickedFile.path);
+        setState(() => _isUploadingPhoto = true);
+        final user = _authService.currentUser;
+
+        final result = await _authService.syncProfileUpdateToServer(
+          namaLengkap: user?.name ?? 'Sobat GERAK',
+          tinggiBadan: user?.tinggiBadan ?? 170,
+          beratBadan: _beratSekarang,
+          beratTarget: _beratTarget,
+          photoPath: pickedFile.path,
+        );
 
         if (!mounted) return;
+        setState(() => _isUploadingPhoto = false);
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
-              children: const [
-                Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                SizedBox(width: 10),
-                Expanded(child: Text('Foto profil berhasil diperbarui!')),
+              children: [
+                Icon(
+                  result.isSuccess
+                      ? Icons.check_circle_rounded
+                      : Icons.info_outline_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Text(result.message)),
               ],
             ),
-            backgroundColor: const Color(0xFF16A34A),
+            backgroundColor: result.isSuccess
+                ? const Color(0xFF16A34A)
+                : const Color(0xFFD97706),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
     } catch (e) {
       if (!mounted) return;
+      setState(() => _isUploadingPhoto = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal memilih foto: $e'),
+          content: Text('Gagal mengunggah foto: $e'),
           backgroundColor: const Color(0xFFD84343),
           behavior: SnackBarBehavior.floating,
         ),
@@ -268,13 +349,18 @@ class _ProfilScreenState extends State<ProfilScreen> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // 3. NAVIGASI EDIT PROFIL
-  // ─────────────────────────────────────────────────────────────────────
   Future<void> _bukaEditProfil() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const EditProfilScreen()),
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => EditProfilScreen(
+          initialBerat: _beratSekarang,
+          initialTarget: _beratTarget,
+        ),
+      ),
     );
+    if (updated == true) {
+      _loadProfilStats();
+    }
   }
 
   @override
@@ -286,7 +372,10 @@ class _ProfilScreenState extends State<ProfilScreen> {
         elevation: 0,
         leading: GestureDetector(
           onTap: () {
-            if (Navigator.of(context).canPop()) {
+            final nav = MainNavigationController.of(context);
+            if (nav != null) {
+              nav.switchTab(0);
+            } else if (Navigator.of(context).canPop()) {
               Navigator.of(context).pop();
             } else {
               Navigator.of(context).pushReplacementNamed('/dashboard');
@@ -323,69 +412,69 @@ class _ProfilScreenState extends State<ProfilScreen> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-          child: Column(
-            children: [
-              // ── 1. CARD AVATAR & NAMA ─────────────────────────────────
-              _buildAvatarCard(context),
-              const SizedBox(height: 18),
-
-              // ── 2. STATISTIK 3 CARD TERPISAH ─────────────────────────
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildSingleStatCard(
-                      icon: Icons.calendar_view_week_rounded,
-                      nilai: '248.5',
-                      label: 'TOTAL JARAK',
-                      sublabel: 'Kilometer',
-                    ),
+        child: RefreshIndicator(
+          onRefresh: _loadProfilStats,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            child: Column(
+              children: [
+                GerakEntrance(delayMs: 0, child: _buildAvatarCard(context)),
+                const SizedBox(height: 18),
+                GerakEntrance(
+                  delayMs: 100,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildSingleStatCard(
+                          icon: Icons.route_rounded,
+                          nilai: _totalJarakKm.toStringAsFixed(1),
+                          label: 'TOTAL JARAK',
+                          sublabel: 'Kilometer',
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildSingleStatCard(
+                          icon: Icons.directions_run_rounded,
+                          nilai: '$_totalSesi',
+                          label: 'AKTIVITAS',
+                          sublabel: 'Total Sesi',
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildSingleStatCard(
+                          icon: Icons.local_fire_department_rounded,
+                          nilai: _totalKalori.toStringAsFixed(0),
+                          label: 'TERBAKAR',
+                          sublabel: 'Kcal',
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _buildSingleStatCard(
-                      icon: Icons.access_time_rounded,
-                      nilai: '28j 45m',
-                      label: 'DURASI',
-                      sublabel: 'Bulan Ini',
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _buildSingleStatCard(
-                      icon: Icons.speed_rounded,
-                      nilai: "5'24\"",
-                      label: 'RATA-RATA',
-                      sublabel: 'Per Km',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-
-              // ── 3. CARD TARGET LARI MINGGUAN ──────────────────────────
-              _buildTargetCard(),
-              const SizedBox(height: 18),
-
-              // ── 4. CARD TOMBOL LOGOUT TERINTEGRASI ─────────────────────
-              _buildLogoutCard(),
-              const SizedBox(height: 20),
-            ],
+                ),
+                const SizedBox(height: 18),
+                GerakEntrance(delayMs: 200, child: _buildTargetCard()),
+                const SizedBox(height: 18),
+                GerakEntrance(delayMs: 280, child: _buildLogoutCard()),
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: widget.showBottomNav ? const AppBottomNavBar(currentIndex: 4) : null,
+      bottomNavigationBar:
+          widget.showBottomNav ? const AppBottomNavBar(currentIndex: 4) : null,
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // 1. CARD AVATAR + NAMA + EDIT PROFIL
-  // ─────────────────────────────────────────────────────────────────────
   Widget _buildAvatarCard(BuildContext context) {
     final user = _authService.currentUser;
-    final displayName = user?.name.isNotEmpty == true ? user!.name : 'Fiqih Al Firdaus';
-    final displayLocation = user?.location.isNotEmpty == true ? user!.location : 'Jember,  Indonesia';
+    final displayName =
+        user?.name.isNotEmpty == true ? user!.name : 'Sobat GERAK';
+    final displayEmail =
+        user?.email.isNotEmpty == true ? user!.email : 'Jember, Indonesia';
 
     return Container(
       width: double.infinity,
@@ -404,12 +493,11 @@ class _ProfilScreenState extends State<ProfilScreen> {
       ),
       child: Column(
         children: [
-          // Avatar dengan lingkaran biru dan ikon kamera
           Stack(
             clipBehavior: Clip.none,
             children: [
               GestureDetector(
-                onTap: _pilihSumberFoto,
+                onTap: _isUploadingPhoto ? null : _pilihSumberFoto,
                 child: Container(
                   width: 96,
                   height: 96,
@@ -421,17 +509,17 @@ class _ProfilScreenState extends State<ProfilScreen> {
                     ),
                   ),
                   child: ClipOval(
-                    child: _buildAvatarImage(user?.photoPath),
+                    child: _isUploadingPhoto
+                        ? const Center(child: CircularProgressIndicator())
+                        : _buildAvatarImage(user?.photoPath),
                   ),
                 ),
               ),
-
-              // Ikon kamera di pojok kanan bawah avatar
               Positioned(
                 bottom: 0,
                 right: 0,
                 child: GestureDetector(
-                  onTap: _pilihSumberFoto,
+                  onTap: _isUploadingPhoto ? null : _pilihSumberFoto,
                   child: Container(
                     width: 30,
                     height: 30,
@@ -451,8 +539,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
             ],
           ),
           const SizedBox(height: 14),
-
-          // Nama
           Text(
             displayName,
             style: const TextStyle(
@@ -463,10 +549,8 @@ class _ProfilScreenState extends State<ProfilScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 4),
-
-          // Lokasi
           Text(
-            displayLocation,
+            displayEmail,
             style: const TextStyle(
               fontSize: 13.5,
               color: Color(0xFF64748B),
@@ -475,19 +559,18 @@ class _ProfilScreenState extends State<ProfilScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 18),
-
-          // Tombol Edit Profil
           SizedBox(
             width: double.infinity,
             height: 46,
             child: ElevatedButton.icon(
               onPressed: _bukaEditProfil,
-              icon: const Icon(Icons.edit_rounded, color: Colors.white, size: 18),
+              icon:
+                  const Icon(Icons.edit_rounded, color: Colors.white, size: 18),
               label: const Text(
-                'Edit Profil',
+                'Edit Profil & Target Berat',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 15,
+                  fontSize: 14.5,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -508,12 +591,19 @@ class _ProfilScreenState extends State<ProfilScreen> {
 
   Widget _buildAvatarImage(String? photoPath) {
     if (photoPath != null && photoPath.isNotEmpty) {
+      if (photoPath.startsWith('http')) {
+        return Image.network(
+          photoPath,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _buildFallbackAvatar(),
+        );
+      }
       final file = File(photoPath);
       if (file.existsSync()) {
         return Image.file(
           file,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _buildFallbackAvatar(),
+          errorBuilder: (_, _, _) => _buildFallbackAvatar(),
         );
       }
     }
@@ -524,7 +614,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
     return Image.asset(
       'assets/images/profile_user.png',
       fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) => Container(
+      errorBuilder: (_, _, _) => Container(
         color: const Color(0xFFDBEAFE),
         child: const Icon(
           Icons.person_rounded,
@@ -535,9 +625,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // 2. STAT KARTU TUNGGAL
-  // ─────────────────────────────────────────────────────────────────────
   Widget _buildSingleStatCard({
     required IconData icon,
     required String nilai,
@@ -602,10 +689,10 @@ class _ProfilScreenState extends State<ProfilScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // 3. CARD TARGET LARI MINGGUAN
-  // ─────────────────────────────────────────────────────────────────────
   Widget _buildTargetCard() {
+    final sisaKg = (_beratSekarang - _beratTarget).clamp(0.0, 200.0);
+    final ratio = (_progresPersen / 100.0).clamp(0.0, 1.0);
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -623,7 +710,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row header: Flag icon + Title/Subtitle + 85% badge
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -641,21 +727,21 @@ class _ProfilScreenState extends State<ProfilScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              Expanded(
+              const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text(
-                      'Target Lari Mingguan',
+                      'Target Penurunan Berat Badan',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w900,
                         color: Color(0xFF0F172A),
                       ),
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Sisa 3 hari lagi di minggu ini',
+                      'Sinkron dengan profil web GERAK',
                       style: TextStyle(
                         fontSize: 12,
                         color: Color(0xFF64748B),
@@ -666,14 +752,15 @@ class _ProfilScreenState extends State<ProfilScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFEDD5),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text(
-                  '85%',
-                  style: TextStyle(
+                child: Text(
+                  '$_progresPersen%',
+                  style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF9A3412),
@@ -683,23 +770,21 @@ class _ProfilScreenState extends State<ProfilScreen> {
             ],
           ),
           const SizedBox(height: 16),
-
-          // Row: 38.5 / 45 km  &  ⚡ Tinggal 6.5 km lagi!
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               RichText(
-                text: const TextSpan(
-                  style: TextStyle(
+                text: TextSpan(
+                  style: const TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.w900,
                     color: Color(0xFF0F172A),
                   ),
                   children: [
-                    TextSpan(text: '38.5'),
+                    TextSpan(text: '${_beratSekarang.toStringAsFixed(1)} kg'),
                     TextSpan(
-                      text: ' / 45 km',
-                      style: TextStyle(
+                      text: ' → ${_beratTarget.toStringAsFixed(0)} kg',
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF64748B),
@@ -709,12 +794,13 @@ class _ProfilScreenState extends State<ProfilScreen> {
                 ),
               ),
               Row(
-                children: const [
-                  Icon(Icons.bolt_rounded, color: Color(0xFFD97706), size: 18),
-                  SizedBox(width: 2),
+                children: [
+                  const Icon(Icons.bolt_rounded,
+                      color: Color(0xFFD97706), size: 18),
+                  const SizedBox(width: 2),
                   Text(
-                    'Tinggal 6.5 km lagi!',
-                    style: TextStyle(
+                    'Sisa ${sisaKg.toStringAsFixed(1)} kg',
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF9A3412),
@@ -725,20 +811,17 @@ class _ProfilScreenState extends State<ProfilScreen> {
             ],
           ),
           const SizedBox(height: 10),
-
-          // Progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: const LinearProgressIndicator(
-              value: 0.855,
+            child: LinearProgressIndicator(
+              value: ratio,
               minHeight: 9,
-              backgroundColor: Color(0xFFE8F1FF),
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
+              backgroundColor: const Color(0xFFE8F1FF),
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
             ),
           ),
           const SizedBox(height: 16),
-
-          // Streak banner
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
@@ -746,21 +829,22 @@ class _ProfilScreenState extends State<ProfilScreen> {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
-              children: const [
-                Icon(Icons.emoji_events_outlined, color: Color(0xFF0077E6), size: 20),
-                SizedBox(width: 8),
+              children: [
+                const Icon(Icons.emoji_events_outlined,
+                    color: Color(0xFF0077E6), size: 20),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Streak lari 4 minggu berturut-turut!',
-                    style: TextStyle(
+                    'Berat awal program: ${_beratAwal.toStringAsFixed(1)} kg',
+                    style: const TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF334155),
                     ),
                   ),
                 ),
-                Text(
-                  'Hebat',
+                const Text(
+                  'Aktif',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
@@ -775,9 +859,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // 4. TOMBOL LOGOUT TERINTEGRASI DI HALAMAN
-  // ─────────────────────────────────────────────────────────────────────
   Widget _buildLogoutCard() {
     return Container(
       width: double.infinity,

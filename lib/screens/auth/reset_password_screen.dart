@@ -28,6 +28,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isSubmitting = false;
+  bool _isResending = false;
 
   @override
   void initState() {
@@ -43,6 +44,27 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     super.dispose();
   }
 
+  Future<void> _handleResendOtp() async {
+    if (_isResending || _isSubmitting) return;
+    setState(() => _isResending = true);
+
+    try {
+      final result = await AuthService.instance.requestPasswordReset(widget.email);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message),
+          backgroundColor: result.isSuccess ? AppColors.primary : const Color(0xFFD84343),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isResending = false);
+    }
+  }
+
   Future<void> _handleResetPassword() async {
     FocusScope.of(context).unfocus();
     final isValid = _formKey.currentState?.validate() ?? false;
@@ -51,21 +73,20 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      await Future.delayed(const Duration(milliseconds: 700));
-
       final token = _tokenController.text.trim();
       final newPassword = _passwordController.text;
+      final confirmPassword = _confirmPasswordController.text;
 
-      final result = AuthService.instance.resetPassword(
+      final result = await AuthService.instance.resetPassword(
         email: widget.email,
         token: token,
         newPassword: newPassword,
+        confirmPassword: confirmPassword,
       );
 
       if (!mounted) return;
 
       if (!result.isSuccess) {
-        // Gagal (token kadaluarsa, salah, atau sudah pernah dipakai)
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -83,16 +104,13 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         return;
       }
 
-      // Berhasil mereset password!
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
-            children: const [
-              Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text('Kata sandi berhasil diperbarui! Silakan masuk dengan kata sandi baru.'),
-              ),
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(child: Text(result.message)),
             ],
           ),
           backgroundColor: const Color(0xFF16A34A),
@@ -101,7 +119,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
       );
 
-      // Arahkan kembali ke halaman Login dan bersihkan stack
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (route) => false,
@@ -141,8 +158,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 8),
-
-                  // Logo
                   Center(
                     child: Image.asset(
                       'assets/images/logo_gerak.png',
@@ -156,8 +171,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Judul & Subjudul
                   const Text(
                     'Atur Ulang Kata Sandi 🔑',
                     style: TextStyle(
@@ -168,7 +181,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Buat kata sandi baru untuk akun:\n${widget.email}',
+                    'Masukkan 6 digit kode yang dikirim ke:\n${widget.email}',
                     style: const TextStyle(
                       fontSize: 13.5,
                       height: 1.45,
@@ -177,20 +190,36 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // ── Field Kode Verifikasi / Token ──────────────────
-                  _buildFieldLabel('Kode Verifikasi (6 Digit)'),
+                  // ── Field Kode Verifikasi / OTP ────────────────────
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildFieldLabel('Kode Verifikasi (6 Digit)'),
+                      GestureDetector(
+                        onTap: _isResending ? null : _handleResendOtp,
+                        child: Text(
+                          _isResending ? 'Mengirim...' : 'Kirim ulang kode',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.link,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   _buildShadowField(
                     child: AppTextField(
                       controller: _tokenController,
-                      hintText: 'Masukkan 6 digit kode verifikasi',
+                      hintText: 'Contoh: 482910',
                       prefixIcon: Icons.pin_outlined,
                       keyboardType: TextInputType.number,
                       textInputAction: TextInputAction.next,
                       validator: (value) {
                         final v = value?.trim() ?? '';
                         if (v.isEmpty) return 'Kode verifikasi wajib diisi';
-                        if (v.length < 6) return 'Kode verifikasi minimal 6 karakter';
+                        if (v.length != 6) return 'Kode verifikasi harus 6 digit angka';
                         return null;
                       },
                     ),
@@ -264,14 +293,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       color: const Color(0xFFEFF6FF),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Row(
+                    child: const Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
+                      children: [
                         Icon(Icons.shield_outlined, size: 18, color: AppColors.primary),
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Gunakan minimal 8 karakter dengan kombinasi huruf, angka, atau simbol untuk keamanan akun yang lebih baik.',
+                            'Password baru ini akan langsung berlaku untuk login di aplikasi Mobile maupun Website GERAK.',
                             style: TextStyle(
                               fontSize: 11.5,
                               color: Color(0xFF3B82F6),
@@ -321,7 +350,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Batal / Kembali ke Login
                   Center(
                     child: GestureDetector(
                       onTap: () {
@@ -377,4 +405,3 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     );
   }
 }
-

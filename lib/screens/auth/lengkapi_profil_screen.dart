@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/bmi_calculator.dart';
 import '../utils/validators.dart';
@@ -14,12 +15,12 @@ class LengkapiProfilScreen extends StatefulWidget {
 class _LengkapiProfilScreenState extends State<LengkapiProfilScreen> {
   final _formKey = GlobalKey<FormState>();
 
-final _usiaController = TextEditingController();
-final _tinggiController = TextEditingController();
-final _beratController = TextEditingController();
-final _targetBeratController = TextEditingController();
+  final _usiaController = TextEditingController(text: '21');
+  final _tinggiController = TextEditingController();
+  final _beratController = TextEditingController();
+  final _targetBeratController = TextEditingController();
 
-String _jenisKelamin = '';
+  String _jenisKelamin = 'Laki-Laki';
   bool _isSubmitting = false;
 
   BmiResult _bmi = const BmiResult(value: 0, category: '-', color: Colors.grey);
@@ -28,7 +29,6 @@ String _jenisKelamin = '';
   void initState() {
     super.initState();
     _recalculateBmi();
-    // Setiap tinggi/berat berubah, BMI ikut di-refresh live.
     _tinggiController.addListener(_recalculateBmi);
     _beratController.addListener(_recalculateBmi);
   }
@@ -36,7 +36,7 @@ String _jenisKelamin = '';
   void _recalculateBmi() {
     final tinggi = double.tryParse(_tinggiController.text.trim());
     final berat = double.tryParse(_beratController.text.trim());
-    if (tinggi == null || berat == null) return;
+    if (tinggi == null || berat == null || tinggi <= 0 || berat <= 0) return;
     setState(() {
       _bmi = BmiCalculator.calculate(heightCm: tinggi, weightKg: berat);
     });
@@ -58,15 +58,62 @@ String _jenisKelamin = '';
     if (!isValid) return;
     if (_isSubmitting) return;
 
+    final usia = int.tryParse(_usiaController.text.trim()) ?? 0;
+    final tinggi = double.tryParse(_tinggiController.text.trim()) ?? 0;
+    final beratSaatIni = double.tryParse(_beratController.text.trim()) ?? 0;
+    final targetBerat = double.tryParse(_targetBeratController.text.trim()) ?? 0;
+
+    if (usia < 19 || usia > 65) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Usia harus antara 19 hingga 65 tahun.'),
+          backgroundColor: Color(0xFFD84343),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (targetBerat >= beratSaatIni) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Target berat badan harus lebih kecil dari berat badan saat ini.'),
+          backgroundColor: Color(0xFFD84343),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
     try {
-      // TODO: simpan data profil ke backend/local storage di sini.
-      await Future.delayed(const Duration(milliseconds: 700));
+      final result = await AuthService.instance.completeRegistrationAndSync(
+        usia: usia,
+        jenisKelaminLabel: _jenisKelamin,
+        tinggiBadan: tinggi,
+        beratBadan: beratSaatIni,
+        targetBerat: targetBerat,
+      );
+
       if (!mounted) return;
 
-      final beratSaatIni = double.tryParse(_beratController.text.trim()) ?? 0;
-      final targetBerat =
-          double.tryParse(_targetBeratController.text.trim()) ?? 0;
+      if (!result.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(child: Text(result.message)),
+              ],
+            ),
+            backgroundColor: const Color(0xFFD84343),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        return;
+      }
 
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -80,7 +127,6 @@ String _jenisKelamin = '';
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +179,7 @@ String _jenisKelamin = '';
                           controller: _tinggiController,
                           unit: 'cm',
                           validator: Validators.numberInRange(
-                              label: 'Tinggi badan', min: 100, max: 250),
+                              label: 'Tinggi badan', min: 140, max: 200),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -143,7 +189,7 @@ String _jenisKelamin = '';
                           controller: _beratController,
                           unit: 'kg',
                           validator: Validators.numberInRange(
-                              label: 'Berat badan', min: 20, max: 300),
+                              label: 'Berat badan', min: 30, max: 250),
                         ),
                       ),
                     ],
@@ -161,7 +207,7 @@ String _jenisKelamin = '';
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         disabledBackgroundColor:
-                            AppColors.primary.withOpacity(0.6),
+                            AppColors.primary.withValues(alpha: 0.6),
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
@@ -254,7 +300,7 @@ String _jenisKelamin = '';
       borderRadius: BorderRadius.circular(16),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.04),
+          color: Colors.black.withValues(alpha: 0.04),
           blurRadius: 12,
           offset: const Offset(0, 4),
         ),
@@ -267,8 +313,8 @@ String _jenisKelamin = '';
       onTap: () async {
         FocusScope.of(context).unfocus();
         final picked = await _showPickerSheet(
-          title: 'Pilih Usia',
-          options: List.generate(70, (i) => '${i + 10}'),
+          title: 'Pilih Usia (19 - 65 Tahun)',
+          options: List.generate(47, (i) => '${i + 19}'),
           selected: _usiaController.text,
         );
         if (picked != null) {

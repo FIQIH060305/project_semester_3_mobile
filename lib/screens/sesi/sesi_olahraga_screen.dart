@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/riwayat_item.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../main_navigation_screen.dart';
 import '../riwayat/riwayat_olahraga_screen.dart';
 import 'mulai_olahraga_screen.dart';
 import 'ringkasan_sesi_screen.dart';
@@ -17,7 +18,19 @@ class SesiOlahragaScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        automaticallyImplyLeading: false,
+        leading: GestureDetector(
+          onTap: () {
+            final nav = MainNavigationController.of(context);
+            if (nav != null) {
+              nav.switchTab(0);
+            } else if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).pushReplacementNamed('/dashboard');
+            }
+          },
+          child: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0077E6), size: 22),
+        ),
         title: const Text(
           'Sesi Olahraga',
           style: TextStyle(
@@ -34,7 +47,7 @@ class SesiOlahragaScreen extends StatelessWidget {
               child: Image.asset(
                 'assets/images/logo_gerak.png',
                 height: 32,
-                errorBuilder: (_, __, ___) => Container(
+                errorBuilder: (context, error, stackTrace) => Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     color: const Color(0xFF0077E6),

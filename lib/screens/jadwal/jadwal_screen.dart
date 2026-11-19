@@ -4,6 +4,7 @@ import '../../models/jadwal_item.dart';
 import '../../services/jadwal_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/jadwal_checklist_tile.dart';
+import '../main_navigation_screen.dart';
 import 'tambah_tugas_screen.dart';
 
 class JadwalScreen extends StatefulWidget {
@@ -303,7 +304,16 @@ class _JadwalScreenState extends State<JadwalScreen> {
               child: Row(
                 children: [
                   GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
+                    onTap: () {
+                      final nav = MainNavigationController.of(context);
+                      if (nav != null) {
+                        nav.switchTab(0);
+                      } else if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop();
+                      } else {
+                        Navigator.of(context).pushReplacementNamed('/dashboard');
+                      }
+                    },
                     child: const Icon(Icons.chevron_left_rounded,
                         color: AppColors.brand, size: 32),
                   ),

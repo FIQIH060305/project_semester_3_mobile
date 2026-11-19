@@ -4,13 +4,12 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:pedometer/pedometer.dart';
 
-import '../../widgets/bottom_nav_bar.dart';
 import 'ringkasan_sesi_screen.dart';
 import 'services/tracking_calculator.dart';
 import 'widgets/osm_tracking_map.dart';
 
 class PelacakanAktifScreen extends StatefulWidget {
-  final String jenisOlahraga; // 'Berlari' atau 'Berjalan'  
+  final String jenisOlahraga; // 'Berlari' atau 'Berjalan'
   final double targetJarakKm;
   final double userWeightKg;
   final double userHeightCm;
@@ -68,7 +67,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
 
   // ── Inisialisasi GPS & Sensor Langkah ──────────────────────────────────
   Future<void> _initGpsAndSensors() async {
-    // 1. Cek Service GPS
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (mounted) {
@@ -78,13 +76,11 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
       }
     }
 
-    // 2. Cek Izin Lokasi
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
 
-    // 3. Ambil Posisi Awal
     try {
       Position initialPos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -104,8 +100,7 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
         });
       }
     } catch (_) {
-      // Koordinat default jika device/emulator tanpa GPS (Jember, Indonesia)
-      final fallbackCoord = const LatLng(-8.1724, 113.7007);
+      const fallbackCoord = LatLng(-8.1724, 113.7007);
       if (mounted) {
         setState(() {
           _posisiSaatIni = fallbackCoord;
@@ -116,10 +111,9 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
       }
     }
 
-    // 4. Listen Stream Posisi GPS Real-time
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 2, // Minimal geser 2 meter
+      distanceFilter: 2,
     );
 
     _positionSubscription = Geolocator.getPositionStream(
@@ -130,7 +124,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
       }
     });
 
-    // 5. Listen Sensor Pedometer Perangkat
     try {
       _stepSubscription = Pedometer.stepCountStream.listen(
         (StepCount event) {
@@ -147,7 +140,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
           }
         },
         onError: (err) {
-          // Sensor pedometer tidak tersedia pada device ini -> otomatis gunakan mode estimasi
           if (mounted) {
             setState(() {
               _isStepEstimated = true;
@@ -156,9 +148,11 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
         },
       );
     } catch (_) {
-      setState(() {
-        _isStepEstimated = true;
-      });
+      if (mounted) {
+        setState(() {
+          _isStepEstimated = true;
+        });
+      }
     }
   }
 
@@ -169,7 +163,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
       return;
     }
 
-    // Hitung jarak Haversine
     final distance = TrackingCalculator.hitungJarakHaversine(
       lat1: _lastGpsPosition!.latitude,
       lon1: _lastGpsPosition!.longitude,
@@ -181,7 +174,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
         pos.timestamp.difference(_lastGpsPosition!.timestamp).inMilliseconds /
             1000.0;
 
-    // Filter akurasi dan anomali lonjakan kecepatan
     final valid = TrackingCalculator.isTitikValid(
       distanceMeters: distance,
       timeSeconds: timeDiffSeconds > 0 ? timeDiffSeconds : 1.0,
@@ -198,7 +190,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
       _posisiSaatIni = newCoord;
       _lastGpsPosition = pos;
 
-      // Kecepatan
       if (pos.speed > 0) {
         _currentSpeedKmh = pos.speed * 3.6;
       } else if (timeDiffSeconds > 0) {
@@ -216,7 +207,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
       _averageSpeedKmh = (_totalDistanceMeters / 1000.0) / hours;
     }
 
-    // Jika sensor pedometer tidak ada, hitung dengan panjang langkah alternatif
     if (_isStepEstimated) {
       _stepCount = TrackingCalculator.estimasiLangkahDariJarak(
         jarakMeter: _totalDistanceMeters,
@@ -225,11 +215,12 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
       );
     }
 
-    // Perhitungan Kalori MET: Kalori = MET × 3.5 × Berat / 200 × Durasi (menit)
     final durasiMenit = _secondsElapsed / 60.0;
     final met = TrackingCalculator.getMetValue(
       isBerlari: widget.jenisOlahraga == 'Berlari',
-      speedKmh: _averageSpeedKmh > 0 ? _averageSpeedKmh : (_currentSpeedKmh > 0 ? _currentSpeedKmh : 4.0),
+      speedKmh: _averageSpeedKmh > 0
+          ? _averageSpeedKmh
+          : (_currentSpeedKmh > 0 ? _currentSpeedKmh : 4.0),
     );
 
     _caloriesBurned = TrackingCalculator.hitungKaloriMet(
@@ -238,7 +229,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
       durasiMenit: durasiMenit,
     );
 
-    // Cek kelipatan kilometer untuk Split
     final currentKm = (_totalDistanceMeters / 1000.0).floor();
     if (currentKm > _lastSplitKm) {
       for (int km = _lastSplitKm + 1; km <= currentKm; km++) {
@@ -291,7 +281,7 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
     });
   }
 
-  // ── Mode Simulasi Gerak (Sangat berguna saat uji coba tanpa harus jalan ke luar) ─
+  // ── Mode Simulasi Gerak ────────────────────────────────────────────────
   void _toggleSimulasi() {
     setState(() {
       _isSimulasiAktif = !_isSimulasiAktif;
@@ -302,7 +292,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
       _simulationTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
         if (!_isPaused && mounted) {
           final cur = _posisiSaatIni ?? const LatLng(-8.1724, 113.7007);
-          // Gerak maju sedikit ke utara/timur laut (~6-8 meter)
           final nextLat = cur.latitude + 0.00007;
           final nextLon = cur.longitude + 0.00006;
           final nextPos = LatLng(nextLat, nextLon);
@@ -353,7 +342,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
     final jarakKm = (_totalDistanceMeters / 1000.0);
     final jarakFormatted = jarakKm.toStringAsFixed(2).replaceAll('.', ',');
 
-    // Pace rata-rata
     final avgPaceMin = jarakKm > 0.01 ? (_secondsElapsed / 60.0) / jarakKm : 0.0;
     final paceFormatted = TrackingCalculator.formatPace(avgPaceMin);
 
@@ -422,16 +410,21 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
                 child: const Icon(Icons.directions_run_rounded, color: Colors.white, size: 16),
               ),
             ),
-            const Spacer(),
-            Text(
-              widget.jenisOlahraga,
-              style: const TextStyle(
-                color: Color(0xFF0F172A),
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                widget.jenisOlahraga,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
             // Badge Status GPS / Simulasi
             GestureDetector(
               onTap: _toggleSimulasi,
@@ -481,7 +474,7 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
                   borderRadius: BorderRadius.circular(24),
                   child: Stack(
                     children: [
-                      // 1. Peta OpenStreetMap (Leaflet/OSM Engine)
+                      // 1. Peta OpenStreetMap
                       Positioned.fill(
                         child: OsmTrackingMap(
                           rutePoints: _rutePoints,
@@ -495,20 +488,20 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
                           },
                           onExpand: () {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Gunakan tombol +/- untuk memperbesar/memperkecil peta.'),
-                                duration: Duration(seconds: 2),
+                              SnackBar(
+                                content: Text('Status GPS: $_gpsStatus • Gunakan tombol +/- pada peta.'),
+                                duration: const Duration(seconds: 2),
                               ),
                             );
                           },
                         ),
                       ),
 
-                      // 2. Kartu Metrik Melayang (Floating Metric Card)
+                      // 2. Kartu Metrik Melayang (Responsif & Anti-Overflow)
                       Positioned(
-                        left: 14,
-                        right: 14,
-                        bottom: 16,
+                        left: 12,
+                        right: 12,
+                        bottom: 12,
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.white,
@@ -526,7 +519,7 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
                             children: [
                               // Top Accent Blue Bar
                               Container(
-                                height: 14,
+                                height: 12,
                                 decoration: const BoxDecoration(
                                   color: Color(0xFF0077E6),
                                   borderRadius: BorderRadius.vertical(
@@ -536,178 +529,215 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
                               ),
 
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                                padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
                                 child: Column(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     // Timer Durasi Real-Time
-                                    Text(
-                                      _formatTimer(_secondsElapsed),
-                                      style: const TextStyle(
-                                        fontSize: 32,
-                                        fontWeight: FontWeight.w900,
-                                        color: Color(0xFF0F2B5C),
-                                        letterSpacing: 0.5,
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        _formatTimer(_secondsElapsed),
+                                        style: const TextStyle(
+                                          fontSize: 30,
+                                          fontWeight: FontWeight.w900,
+                                          color: Color(0xFF0F2B5C),
+                                          letterSpacing: 0.5,
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(height: 2),
                                     const Text(
                                       'DURASI WAKTU',
                                       style: TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 10.5,
                                         fontWeight: FontWeight.w800,
                                         color: Color(0xFF64748B),
                                         letterSpacing: 1.2,
                                       ),
                                     ),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 10),
 
-                                    // 3 Kolom Indikator Utama: Jarak (Menonjol!), Pace, Kalori
+                                    // 3 Kolom Indikator Utama: Jarak, Pace, Kalori
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceAround,
                                       children: [
-                                        // 1. Jarak Tempuh (Paling Menonjol)
-                                        Column(
-                                          children: [
-                                            const Text(
-                                              'Jarak',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Color(0xFF64748B),
-                                                fontWeight: FontWeight.w600,
+                                        // 1. Jarak Tempuh
+                                        Expanded(
+                                          child: Column(
+                                            children: [
+                                              const Text(
+                                                'Jarak',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Color(0xFF64748B),
+                                                  fontWeight: FontWeight.w600,
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            RichText(
-                                              text: TextSpan(
-                                                children: [
-                                                  TextSpan(
-                                                    text: jarakKm.toStringAsFixed(2),
-                                                    style: const TextStyle(
-                                                      fontSize: 22,
-                                                      fontWeight: FontWeight.w900,
-                                                      color: Color(0xFF0077E6),
-                                                    ),
+                                              const SizedBox(height: 2),
+                                              FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: RichText(
+                                                  text: TextSpan(
+                                                    children: [
+                                                      TextSpan(
+                                                        text: jarakKm.toStringAsFixed(2),
+                                                        style: const TextStyle(
+                                                          fontSize: 20,
+                                                          fontWeight: FontWeight.w900,
+                                                          color: Color(0xFF0077E6),
+                                                        ),
+                                                      ),
+                                                      const TextSpan(
+                                                        text: ' km',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: Color(0xFF0077E6),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
-                                                  const TextSpan(
-                                                    text: ' km',
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      fontWeight: FontWeight.w700,
-                                                      color: Color(0xFF0077E6),
-                                                    ),
-                                                  ),
-                                                ],
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
+                                        const SizedBox(width: 6),
 
                                         // 2. Pace Rata-rata
-                                        Column(
-                                          children: [
-                                            const Text(
-                                              'Pace Rata-rata',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Color(0xFF64748B),
-                                                fontWeight: FontWeight.w600,
+                                        Expanded(
+                                          child: Column(
+                                            children: [
+                                              const Text(
+                                                'Pace Rata-rata',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Color(0xFF64748B),
+                                                  fontWeight: FontWeight.w600,
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              paceFormatted,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w900,
-                                                color: Color(0xFF0F172A),
+                                              const SizedBox(height: 2),
+                                              FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Text(
+                                                  paceFormatted,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w900,
+                                                    color: Color(0xFF0F172A),
+                                                  ),
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
+                                        const SizedBox(width: 6),
 
                                         // 3. Estimasi Kalori MET
-                                        Column(
-                                          children: [
-                                            const Text(
-                                              'Kalori (MET)',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Color(0xFF64748B),
-                                                fontWeight: FontWeight.w600,
+                                        Expanded(
+                                          child: Column(
+                                            children: [
+                                              const Text(
+                                                'Kalori (MET)',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Color(0xFF64748B),
+                                                  fontWeight: FontWeight.w600,
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            RichText(
-                                              text: TextSpan(
-                                                children: [
-                                                  TextSpan(
-                                                    text: _caloriesBurned.round().toString(),
-                                                    style: const TextStyle(
-                                                      fontSize: 18,
-                                                      fontWeight: FontWeight.w900,
-                                                      color: Color(0xFFD97706),
-                                                    ),
+                                              const SizedBox(height: 2),
+                                              FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: RichText(
+                                                  text: TextSpan(
+                                                    children: [
+                                                      TextSpan(
+                                                        text: _caloriesBurned.round().toString(),
+                                                        style: const TextStyle(
+                                                          fontSize: 18,
+                                                          fontWeight: FontWeight.w900,
+                                                          color: Color(0xFFD97706),
+                                                        ),
+                                                      ),
+                                                      const TextSpan(
+                                                        text: ' kcal',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: Color(0xFFD97706),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
-                                                  const TextSpan(
-                                                    text: ' kcal',
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      fontWeight: FontWeight.w700,
-                                                      color: Color(0xFFD97706),
-                                                    ),
-                                                  ),
-                                                ],
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 10),
 
                                     // Baris Info: Jumlah Langkah & Kecepatan
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         // Langkah
-                                        Row(
-                                          children: [
-                                            const Icon(Icons.bolt_rounded, size: 16, color: Color(0xFF0077E6)),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '$_stepCount langkah',
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w800,
-                                                color: Color(0xFF0F172A),
-                                              ),
-                                            ),
-                                            if (_isStepEstimated)
-                                              const Text(
-                                                ' (Estimasi)',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Color(0xFF64748B),
+                                        Expanded(
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.bolt_rounded, size: 16, color: Color(0xFF0077E6)),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  '$_stepCount langkah',
+                                                  style: const TextStyle(
+                                                    fontSize: 13.5,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: Color(0xFF0F172A),
+                                                  ),
                                                 ),
-                                              ),
-                                          ],
-                                        ),
-                                        const SizedBox(width: 20),
-                                        // Kecepatan
-                                        Row(
-                                          children: [
-                                            const Icon(Icons.speed_rounded, size: 16, color: Color(0xFF0077E6)),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '${_averageSpeedKmh.toStringAsFixed(1)} km/h',
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w800,
-                                                color: Color(0xFF0F172A),
-                                              ),
+                                                if (_isStepEstimated)
+                                                  const Text(
+                                                    ' (Est)',
+                                                    style: TextStyle(
+                                                      fontSize: 10.5,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: Color(0xFF64748B),
+                                                    ),
+                                                  ),
+                                              ],
                                             ),
-                                          ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        // Kecepatan
+                                        Expanded(
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.speed_rounded, size: 16, color: Color(0xFF0077E6)),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  '${_averageSpeedKmh.toStringAsFixed(1)} km/h',
+                                                  style: const TextStyle(
+                                                    fontSize: 13.5,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: Color(0xFF0F172A),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -727,7 +757,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
 
               // ── Action Buttons Row ──────────────────────────────────
               if (!_isPaused) ...[
-                // Mode Berjalan: Tombol Jeda & Selesaikan
                 Row(
                   children: [
                     Expanded(
@@ -736,9 +765,12 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
                         child: ElevatedButton.icon(
                           onPressed: _togglePause,
                           icon: const Icon(Icons.pause_rounded, color: Colors.white, size: 22),
-                          label: const Text(
-                            'Jeda',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Jeda',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFEF233C),
@@ -755,9 +787,12 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
                         child: ElevatedButton.icon(
                           onPressed: _selesaikanAktivitas,
                           icon: const Icon(Icons.flag_rounded, color: Colors.white, size: 20),
-                          label: const Text(
-                            'Selesaikan',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Selesaikan',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF003B95),
@@ -770,7 +805,6 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
                   ],
                 ),
               ] else ...[
-                // Mode Jeda: Tombol Lanjutkan & Selesaikan
                 Row(
                   children: [
                     Expanded(
@@ -780,9 +814,12 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
                         child: ElevatedButton.icon(
                           onPressed: _togglePause,
                           icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
-                          label: const Text(
-                            'Lanjutkan',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Lanjutkan',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFEF233C),
@@ -800,9 +837,12 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
                         child: ElevatedButton.icon(
                           onPressed: _selesaikanAktivitas,
                           icon: const Icon(Icons.flag_rounded, color: Colors.white, size: 18),
-                          label: const Text(
-                            'Selesai',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Selesai',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF003B95),
