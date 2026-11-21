@@ -41,7 +41,7 @@ class GerakApp extends StatelessWidget {
           },
         ),
       ),
-      initialRoute: AuthService.instance.isLoggedIn ? '/dashboard' : '/splash',
+      initialRoute: '/splash',
       routes: {
         '/splash': (_) => const SplashScreen(),
         '/login': (_) => const LoginScreen(),

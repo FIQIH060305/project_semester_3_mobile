@@ -562,4 +562,220 @@ class AuthService extends ChangeNotifier {
     } catch (_) {}
     return [];
   }
+  // =========================================================================
+  // 7. JADWAL OLAHRAGA, NOTIFIKASI & KONTEN EDUKASI DARI DATABASE LARAVEL
+  // =========================================================================
+  Future<List<JsonMap>> fetchJadwalList() async {
+    if (!isLoggedIn) return [];
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/jadwal'), headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is List) {
+          return List<JsonMap>.from(body['data'] as List);
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<JsonMap?> createJadwalOnServer({
+    required String tugas,
+    required DateTime tanggalTugas,
+    String jenisOlahraga = 'Lari',
+  }) async {
+    if (!isLoggedIn) return null;
+    try {
+      final tglStr =
+          '${tanggalTugas.year.toString().padLeft(4, '0')}-${tanggalTugas.month.toString().padLeft(2, '0')}-${tanggalTugas.day.toString().padLeft(2, '0')}';
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/jadwal'),
+            headers: _jsonHeaders,
+            body: jsonEncode({
+              'tugas': tugas,
+              'jenis_olahraga': jenisOlahraga,
+              'tanggal_tugas': tglStr,
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is JsonMap) {
+          return body['data'] as JsonMap;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<bool?> toggleJadwalOnServer(String idJadwal) async {
+    if (!isLoggedIn) return null;
+    try {
+      final response = await http
+          .patch(
+            Uri.parse('$baseUrl/jadwal/$idJadwal/toggle'),
+            headers: _jsonHeaders,
+          )
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true) {
+          return body['selesai'] == true;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<bool> deleteJadwalOnServer(String idJadwal) async {
+    if (!isLoggedIn) return false;
+    try {
+      final response = await http
+          .delete(
+            Uri.parse('$baseUrl/jadwal/$idJadwal'),
+            headers: _jsonHeaders,
+          )
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        return body['success'] == true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<List<JsonMap>> fetchNotifikasiList() async {
+    if (!isLoggedIn) return [];
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/notifikasi'), headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is List) {
+          return List<JsonMap>.from(body['data'] as List);
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<void> markNotifikasiReadOnServer() async {
+    if (!isLoggedIn) return;
+    try {
+      await http
+          .post(
+            Uri.parse('$baseUrl/notifikasi/baca'),
+            headers: _jsonHeaders,
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
+  }
+
+  Future<List<JsonMap>> fetchEdukasiList() async {
+    if (!isLoggedIn) return [];
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/edukasi'), headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is List) {
+          return List<JsonMap>.from(body['data'] as List);
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+  // =========================================================================
+  // 8. PEMANTAUAN PROGRES BERAT BADAN MINGGUAN (SENIN - MINGGU)
+  // =========================================================================
+  Future<JsonMap?> fetchWeeklyWeightProgress({int weekOffset = 0}) async {
+    if (!isLoggedIn) return null;
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl/berat-badan/mingguan?week_offset=$weekOffset'),
+            headers: _jsonHeaders,
+          )
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is JsonMap) {
+          return body['data'] as JsonMap;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<AuthResult> recordDailyWeight({
+    required double beratBadan,
+    DateTime? tanggal,
+  }) async {
+    if (!isLoggedIn) {
+      return AuthResult(
+        isSuccess: false,
+        message: 'Silakan masuk kembali untuk mencatat berat badan.',
+      );
+    }
+
+    try {
+      final payload = <String, dynamic>{
+        'berat_badan': beratBadan,
+      };
+      if (tanggal != null) {
+        payload['tanggal_pencatatan'] =
+            '${tanggal.year.toString().padLeft(4, '0')}-${tanggal.month.toString().padLeft(2, '0')}-${tanggal.day.toString().padLeft(2, '0')}';
+      }
+
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/berat-badan/catat'),
+            headers: _jsonHeaders,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      final body = jsonDecode(response.body) as JsonMap;
+      if (response.statusCode == 200 && body['success'] == true) {
+        final today = DateTime.now();
+        final isToday = tanggal == null ||
+            (tanggal.year == today.year &&
+                tanggal.month == today.month &&
+                tanggal.day == today.day);
+        if (isToday && currentUser != null) {
+          currentUser!.beratBadan = beratBadan;
+          await _persistSession(authToken, currentUser);
+          notifyListeners();
+        }
+
+        return AuthResult(
+          isSuccess: true,
+          message: body['message']?.toString() ?? 'Berat badan berhasil dicatat!',
+        );
+      }
+
+      return AuthResult(
+        isSuccess: false,
+        message: _extractErrorMessage(body, 'Gagal menyimpan berat badan.'),
+      );
+    } catch (_) {
+      return AuthResult(
+        isSuccess: false,
+        message: 'Tidak dapat terhubung ke server Laravel.',
+      );
+    }
+  }
 }

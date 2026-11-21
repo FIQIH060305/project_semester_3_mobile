@@ -473,7 +473,7 @@ class _EditProfilScreenState extends State<EditProfilScreen> {
                             ),
                           )
                         : const Text(
-                            'Simpan & Sinkronkan ke Server',
+                            'Simpan',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 15,

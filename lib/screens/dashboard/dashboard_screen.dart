@@ -1,8 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
+import '../../models/jadwal_item.dart';
 import '../../services/auth_service.dart';
+import '../../services/jadwal_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/gerak_animations.dart';
+import '../../widgets/weekly_weight_card.dart';
 import '../notifikasi/notifikasi_screen.dart';
 import '../profil/profil_screen.dart';
 import '../main_navigation_screen.dart';
@@ -19,43 +24,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _namaPengguna = AuthService.instance.currentUser?.name ?? 'Sobat GERAK';
   int _langkahHariIni = 0;
   double _kaloriHariIni = 0;
-  double _beratSekarang = AuthService.instance.currentUser?.beratBadan ?? 70.0;
-  double _beratTarget = 65.0;
-  double _sudahTurun = 0;
   int _totalSesiBulanIni = 0;
 
-  late List<_LatihanData> latihanHariIni;
+  List<JsonMap> _edukasiList = [];
+  final GlobalKey<WeeklyWeightCardState> _weightCardKey =
+      GlobalKey<WeeklyWeightCardState>();
 
   @override
   void initState() {
     super.initState();
     AuthService.instance.addListener(_onAuthChanged);
-    latihanHariIni = [
-      _LatihanData(
-        judul: 'Jalan 30 menit',
-        waktu: 'Hari ini, 07.00',
-        labelBadge: 'Tuntas',
-        selesai: true,
-      ),
-      _LatihanData(
-        judul: 'Berlari 30 menit',
-        waktu: 'Hari ini, 10.00',
-        labelBadge: 'Nanti',
-        selesai: false,
-      ),
-      _LatihanData(
-        judul: 'Push up 50 reps',
-        waktu: 'Hari ini, 15.00',
-        labelBadge: 'Besok',
-        selesai: false,
-      ),
-    ];
+    JadwalService.instance.addListener(_onJadwalChanged);
+    JadwalService.instance.initialize();
     _loadDashboardFromServer();
   }
 
   @override
   void dispose() {
     AuthService.instance.removeListener(_onAuthChanged);
+    JadwalService.instance.removeListener(_onJadwalChanged);
     super.dispose();
   }
 
@@ -65,55 +52,141 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final user = AuthService.instance.currentUser;
       if (user != null) {
         _namaPengguna = user.name;
-        if (user.beratBadan != null) {
-          _beratSekarang = user.beratBadan!;
-        }
       }
     });
   }
 
-  Future<void> _loadDashboardFromServer() async {
+  void _onJadwalChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadDashboardFromServer({bool refreshWeightCard = false}) async {
+    if (refreshWeightCard) {
+      _weightCardKey.currentState?.loadWeeklyData();
+    }
+    await JadwalService.instance.syncFromServer();
     final data = await AuthService.instance.fetchDashboardData();
-    if (!mounted || data == null) return;
+    final edukasi = await AuthService.instance.fetchEdukasiList();
+
+    if (!mounted) return;
 
     setState(() {
-      final user = data['user'] as Map<String, dynamic>?;
-      final target = data['target'] as Map<String, dynamic>?;
-      final hariIni = data['hari_ini'] as Map<String, dynamic>?;
+      _edukasiList = edukasi;
 
-      if (user != null) {
-        _namaPengguna = user['nama_lengkap']?.toString() ?? _namaPengguna;
-        _beratSekarang =
-            double.tryParse(user['berat_sekarang']?.toString() ?? '') ??
-                _beratSekarang;
+      if (data != null) {
+        final user = data['user'] as JsonMap?;
+        final hariIni = data['hari_ini'] as JsonMap?;
+
+        if (user != null) {
+          _namaPengguna = user['nama_lengkap']?.toString() ?? _namaPengguna;
+        }
+        if (hariIni != null) {
+          _langkahHariIni =
+              int.tryParse(hariIni['langkah']?.toString() ?? '') ?? 0;
+          _kaloriHariIni =
+              double.tryParse(hariIni['kalori']?.toString() ?? '') ?? 0;
+        }
+        _totalSesiBulanIni =
+            int.tryParse(data['total_sesi_bulan_ini']?.toString() ?? '') ?? 0;
       }
-      if (target != null) {
-        _beratTarget =
-            double.tryParse(target['berat_target']?.toString() ?? '') ??
-                _beratTarget;
-        _sudahTurun =
-            double.tryParse(target['sudah_turun']?.toString() ?? '') ?? 0;
-      }
-      if (hariIni != null) {
-        _langkahHariIni =
-            int.tryParse(hariIni['langkah']?.toString() ?? '') ?? 0;
-        _kaloriHariIni =
-            double.tryParse(hariIni['kalori']?.toString() ?? '') ?? 0;
-      }
-      _totalSesiBulanIni =
-          int.tryParse(data['total_sesi_bulan_ini']?.toString() ?? '') ?? 0;
     });
   }
 
-  void _toggleSelesai(int index) {
-    setState(() {
-      latihanHariIni[index].selesai = !latihanHariIni[index].selesai;
-      if (latihanHariIni[index].selesai) {
-        latihanHariIni[index].labelBadge = 'Tuntas';
-      } else {
-        latihanHariIni[index].labelBadge = index == 1 ? 'Nanti' : 'Besok';
+  String? _extractYoutubeId(String? url) {
+    if (url == null || url.isEmpty) return null;
+    final regExp = RegExp(
+      r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})',
+    );
+    final match = regExp.firstMatch(url);
+    return match?.group(1);
+  }
+
+  String _formatTanggalPublish(String? rawDate) {
+    if (rawDate == null || rawDate.isEmpty) return '';
+    final dt = DateTime.tryParse(rawDate);
+    if (dt == null) return rawDate;
+    return DateFormat('d MMM yyyy', 'id_ID').format(dt);
+  }
+
+  Future<void> _bukaKontenEdukasi(JsonMap item) async {
+    var urlStr = (item['url_video_youtube']?.toString() ?? '').trim();
+    if (urlStr.isNotEmpty) {
+      if (!urlStr.startsWith('http://') && !urlStr.startsWith('https://')) {
+        urlStr = 'https://$urlStr';
       }
-    });
+      final uri = Uri.tryParse(urlStr);
+      if (uri != null) {
+        try {
+          final launched = await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
+          if (launched) return;
+        } catch (_) {}
+      }
+    }
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.65,
+        maxChildSize: 0.9,
+        builder: (_, controller) => ListView(
+          controller: controller,
+          padding: const EdgeInsets.all(22),
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              item['judul']?.toString() ?? 'Edukasi GERAK',
+              style: const TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            if ((item['tanggal_publish']?.toString() ?? '').isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Dipublikasikan: ${_formatTanggalPublish(item['tanggal_publish']?.toString())}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Text(
+              item['konten_teks']?.toString() ??
+                  item['deskripsi']?.toString() ??
+                  '',
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF334155),
+                height: 1.6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -123,7 +196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: SafeArea(
         child: RefreshIndicator(
           color: const Color(0xFF1D5FC9),
-          onRefresh: _loadDashboardFromServer,
+          onRefresh: () => _loadDashboardFromServer(refreshWeightCard: true),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -147,7 +220,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                GerakEntrance(delayMs: 320, child: _buildBeratBadanCard()),
+                GerakEntrance(
+                  delayMs: 320,
+                  child: WeeklyWeightCard(
+                    key: _weightCardKey,
+                    onWeightUpdated: _loadDashboardFromServer,
+                  ),
+                ),
+                if (_edukasiList.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  GerakEntrance(delayMs: 380, child: _buildEdukasiSection()),
+                ],
                 const SizedBox(height: 16),
               ],
             ),
@@ -294,7 +377,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return GestureDetector(
       onTap: () {
         final nav = MainNavigationController.of(context);
-        if (nav != null) nav.switchTab(2); // Langsung arahkan ke tab Tracking
+        if (nav != null) nav.switchTab(2);
       },
       child: Container(
         width: double.infinity,
@@ -379,6 +462,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildLatihanCard() {
+    final jadwalHariIni = JadwalService.instance.hariIni;
+    final daftarTampil = jadwalHariIni.isNotEmpty
+        ? jadwalHariIni
+        : JadwalService.instance.semuaJadwal.take(3).toList();
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -398,126 +486,323 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Transform.rotate(
-                angle: -0.5,
-                child: const Icon(
-                  Icons.fitness_center_rounded,
-                  color: Color(0xFF00A3FF),
-                  size: 20,
-                ),
+              Row(
+                children: [
+                  Transform.rotate(
+                    angle: -0.5,
+                    child: const Icon(
+                      Icons.fitness_center_rounded,
+                      color: Color(0xFF00A3FF),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Latihan Hari ini',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: Color(0xFF1F2937),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              const Text(
-                'Latihan Hari ini',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                  color: Color(0xFF1F2937),
+              GestureDetector(
+                onTap: () {
+                  final nav = MainNavigationController.of(context);
+                  if (nav != null) nav.switchTab(1);
+                },
+                child: const Text(
+                  'Lihat semua',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0077E6),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          ...List.generate(latihanHariIni.length, (index) {
-            final item = latihanHariIni[index];
-            return Padding(
-              padding: EdgeInsets.only(
-                  bottom: index < latihanHariIni.length - 1 ? 10 : 0),
-              child: GestureDetector(
-                onTap: () => _toggleSelesai(index),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 280),
-                  curve: Curves.easeOutCubic,
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: item.selesai
-                        ? const Color(0xFFD6EEFF)
-                        : const Color(0xFFF1F7FF),
-                    borderRadius: BorderRadius.circular(26),
-                  ),
-                  child: Row(
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
-                        width: 22,
-                        height: 22,
-                        decoration: BoxDecoration(
-                          color: item.selesai
-                              ? const Color(0xFF0084FF)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
+          if (daftarTampil.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Belum ada jadwal latihan hari ini. Ketuk "Lihat semua" untuk membuat jadwal.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+            )
+          else
+            ...List.generate(daftarTampil.length, (index) {
+              final JadwalItem item = daftarTampil[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                    bottom: index < daftarTampil.length - 1 ? 10 : 0),
+                child: GestureDetector(
+                  onTap: () => JadwalService.instance.toggleSelesai(item),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: item.selesai
+                          ? const Color(0xFFD6EEFF)
+                          : const Color(0xFFF1F7FF),
+                      borderRadius: BorderRadius.circular(26),
+                    ),
+                    child: Row(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 220),
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
                             color: item.selesai
                                 ? const Color(0xFF0084FF)
-                                : const Color(0xFF1F2937),
-                            width: 1.6,
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: item.selesai
+                                  ? const Color(0xFF0084FF)
+                                  : const Color(0xFF1F2937),
+                              width: 1.6,
+                            ),
+                          ),
+                          child: item.selesai
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.judul,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13.5,
+                                  decoration: item.selesai
+                                      ? TextDecoration.lineThrough
+                                      : TextDecoration.none,
+                                  color: const Color(0xFF1F2937),
+                                ),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                item.kategoriWaktu,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF4B5563),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        child: item.selesai
-                            ? const Icon(
-                                Icons.check_rounded,
-                                color: Colors.white,
-                                size: 16,
-                              )
-                            : null,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: item.selesai
+                                ? const Color(0xFF8DC8FF)
+                                : const Color(0xFFDBEAFE),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            item.labelBadge,
+                            style: const TextStyle(
+                              color: Color(0xFF0F4882),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEdukasiSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.play_circle_fill_rounded,
+                color: Color(0xFFEF4444), size: 22),
+            SizedBox(width: 8),
+            Text(
+              'Edukasi & Video Latihan',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 15.5,
+                color: Color(0xFF1F2937),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 228,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _edukasiList.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 14),
+            itemBuilder: (context, index) {
+              final item = _edukasiList[index];
+              final videoUrl = item['url_video_youtube']?.toString();
+              final ytId = _extractYoutubeId(videoUrl);
+              final customThumb = item['thumbnail']?.toString();
+              final thumbUrl = (customThumb != null && customThumb.isNotEmpty)
+                  ? customThumb
+                  : (ytId != null
+                      ? 'https://img.youtube.com/vi/$ytId/hqdefault.jpg'
+                      : null);
+              final isVideo =
+                  ytId != null || (videoUrl != null && videoUrl.isNotEmpty);
+              final tglPublish =
+                  _formatTanggalPublish(item['tanggal_publish']?.toString());
+
+              return GestureDetector(
+                onTap: () => _bukaKontenEdukasi(item),
+                child: Container(
+                  width: 245,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(17)),
+                        child: Stack(
+                          alignment: Alignment.center,
                           children: [
-                            Text(
-                              item.judul,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13.5,
-                                decoration: item.selesai
-                                    ? TextDecoration.lineThrough
-                                    : TextDecoration.none,
-                                color: const Color(0xFF1F2937),
-                              ),
+                            Container(
+                              height: 118,
+                              width: double.infinity,
+                              color: const Color(0xFFDBEAFE),
+                              child: thumbUrl != null
+                                  ? Image.network(
+                                      thumbUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, _, _) => const Icon(
+                                        Icons.fitness_center_rounded,
+                                        color: Color(0xFF1D5FC9),
+                                        size: 36,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.menu_book_rounded,
+                                      color: Color(0xFF1D5FC9),
+                                      size: 36,
+                                    ),
                             ),
-                            const SizedBox(height: 1),
-                            Text(
-                              item.waktu,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFF4B5563),
-                                fontWeight: FontWeight.w500,
+                            if (isVideo)
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.65),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: item.selesai
-                              ? const Color(0xFF8DC8FF)
-                              : const Color(0xFFDBEAFE),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          item.labelBadge,
-                          style: const TextStyle(
-                            color: Color(0xFF0F4882),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item['kategori']?.toString().toUpperCase() ??
+                                    'EDUKASI',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF0077E6),
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                item['judul']?.toString() ?? 'Konten GERAK',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF0F172A),
+                                  height: 1.25,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (tglPublish.isNotEmpty)
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.calendar_today_rounded,
+                                      size: 11,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      tglPublish,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            );
-          }),
-        ],
-      ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -662,120 +947,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-
-  Widget _buildBeratBadanCard() {
-    final statusTurun = _sudahTurun >= 0
-        ? '-${_sudahTurun.toStringAsFixed(1)} kg progres'
-        : '+${_sudahTurun.abs().toStringAsFixed(1)} kg dari awal';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFBFDBFE), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Berat badan',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14.5,
-                  color: Color(0xFF1F2937),
-                ),
-              ),
-              Text(
-                statusTurun,
-                style: const TextStyle(
-                  color: Color(0xFF22C55E),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${_beratSekarang.toStringAsFixed(1)} kg',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF1F2937),
-                ),
-              ),
-              Text(
-                'Target ${_beratTarget.toStringAsFixed(0)} kg',
-                style: const TextStyle(
-                  color: Color(0xFF9CA3AF),
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 36,
-            width: double.infinity,
-            child: CustomPaint(painter: _TrendLinePainter()),
-          ),
-          const SizedBox(height: 6),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Awal program',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF9CA3AF),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Sekarang',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF9CA3AF),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LatihanData {
-  String judul;
-  String waktu;
-  String labelBadge;
-  bool selesai;
-
-  _LatihanData({
-    required this.judul,
-    required this.waktu,
-    required this.labelBadge,
-    required this.selesai,
-  });
 }
 
 class _SneakerIconPainter extends CustomPainter {
@@ -829,26 +1000,6 @@ class _SneakerIconPainter extends CustomPainter {
       Offset(size.width * 0.85, size.height * 0.95),
       lacePaint,
     );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _TrendLinePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF009CBF)
-      ..strokeWidth = 1.8
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path();
-    path.moveTo(size.width * 0.12, size.height * 0.3);
-    path.lineTo(size.width * 0.88, size.height * 0.85);
-
-    canvas.drawPath(path, paint);
   }
 
   @override

@@ -1,73 +1,102 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import '../models/jadwal_item.dart';
+import 'auth_service.dart';
 
-/// Service pusat untuk mengelola semua operasi jadwal latihan.
-///
-/// Menggunakan pola ChangeNotifier agar widget bisa listen perubahan.
-/// Data disimpan in-memory dan di-persist via SharedPreferences oleh caller.
 class JadwalService extends ChangeNotifier {
   JadwalService._();
   static final JadwalService instance = JadwalService._();
 
-  /// Daftar semua jadwal
   final List<JadwalItem> _jadwalList = [];
-
-  /// Apakah sudah diinisialisasi
   bool _initialized = false;
+  bool isLoading = false;
 
-  /// Getter untuk daftar jadwal (unmodifiable view)
   List<JadwalItem> get semuaJadwal => List.unmodifiable(_jadwalList);
 
-  /// Inisialisasi data dari SharedPreferences atau dummy
-  void initialize({List<JadwalItem>? savedData}) {
-    if (_initialized) return;
+  Future<void> initialize({List<JadwalItem>? savedData, bool forceRefresh = false}) async {
+    if (_initialized && !forceRefresh) return;
     _initialized = true;
 
-    if (savedData != null && savedData.isNotEmpty) {
-      _jadwalList.addAll(savedData);
-    } else {
-      _jadwalList.addAll(dataDummyJadwal());
+    if (AuthService.instance.isLoggedIn) {
+      await syncFromServer();
+      return;
     }
 
-    // Periksa jadwal recurring yang tertunda saat aplikasi dibuka
+    if (savedData != null && savedData.isNotEmpty) {
+      _jadwalList
+        ..clear()
+        ..addAll(savedData);
+    } else if (_jadwalList.isEmpty) {
+      _jadwalList.addAll(dataDummyJadwal());
+    }
     _prosesRecurringTertunda();
     notifyListeners();
+  }
+
+  Future<void> syncFromServer() async {
+    if (!AuthService.instance.isLoggedIn) return;
+    isLoading = true;
+    notifyListeners();
+
+    try {
+      final rows = await AuthService.instance.fetchJadwalList();
+      _jadwalList.clear();
+
+      for (final row in rows) {
+        final tglRaw = row['tanggal_tugas']?.toString() ?? '';
+        final parsedDate = DateTime.tryParse(tglRaw) ?? DateTime.now();
+        final tglDenganJam = DateTime(
+          parsedDate.year,
+          parsedDate.month,
+          parsedDate.day,
+          7,
+          0,
+        );
+
+        _jadwalList.add(
+          JadwalItem(
+            id: (row['id_jadwal'] ?? '').toString(),
+            judul: (row['tugas'] ?? 'Latihan GERAK').toString(),
+            tanggal: tglDenganJam,
+            selesai: row['selesai'] == true,
+            ulangi: false,
+            frekuensi: FrekuensiUlang.tidakUlang,
+          ),
+        );
+      }
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
   // QUERIES
   // ═══════════════════════════════════════════════════════════════
 
-  /// Jadwal yang belum selesai dan sudah lewat waktunya
   List<JadwalItem> get terlambat =>
       _jadwalList.where((j) => j.kategoriWaktu == 'Terlambat').toList();
 
-  /// Jadwal untuk hari ini
   List<JadwalItem> get hariIni =>
       _jadwalList.where((j) => j.kategoriWaktu == 'Hari ini').toList();
 
-  /// Jadwal untuk besok
   List<JadwalItem> get besok =>
       _jadwalList.where((j) => j.kategoriWaktu == 'Besok').toList();
 
-  /// Jadwal untuk minggu depan dan seterusnya
   List<JadwalItem> get mingguDepan =>
       _jadwalList.where((j) => j.kategoriWaktu == 'Minggu depan').toList();
 
-  /// Total jadwal belum selesai (semua yang belum dicentang)
   int get jumlahBelumSelesai => _jadwalList.where((j) => !j.selesai).length;
 
-  /// Total jadwal yang terlambat (belum selesai dan sudah lewat tanggal)
   int get jumlahTerlambat => terlambat.length;
 
-  /// Total jadwal tersisa minggu ini (belum selesai, tanggal dalam minggu ini)
   int get jumlahTersisaMingguIni {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    // Akhir minggu ini = Minggu berikutnya
     final sisaHariKeAkhirMinggu = DateTime.sunday - today.weekday;
-    final akhirMinggu = today.add(Duration(days: sisaHariKeAkhirMinggu < 0 ? 7 + sisaHariKeAkhirMinggu : sisaHariKeAkhirMinggu));
+    final akhirMinggu = today.add(Duration(
+        days: sisaHariKeAkhirMinggu < 0
+            ? 7 + sisaHariKeAkhirMinggu
+            : sisaHariKeAkhirMinggu));
 
     return _jadwalList.where((j) {
       if (j.selesai) return false;
@@ -77,23 +106,40 @@ class JadwalService extends ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // CRUD OPERATIONS
+  // CRUD OPERATIONS (TERHUBUNG KE SERVER LARAVEL)
   // ═══════════════════════════════════════════════════════════════
 
-  /// Tambah jadwal baru
-  void tambahJadwal(JadwalItem item) {
+  Future<void> tambahJadwal(JadwalItem item) async {
     _jadwalList.add(item);
     notifyListeners();
+
+    if (AuthService.instance.isLoggedIn) {
+      final created = await AuthService.instance.createJadwalOnServer(
+        tugas: item.judul,
+        tanggalTugas: item.tanggal,
+      );
+      if (created != null && created['id_jadwal'] != null) {
+        final idx = _jadwalList.indexWhere((j) => j.id == item.id);
+        if (idx != -1) {
+          _jadwalList[idx] =
+              item.copyWith(id: created['id_jadwal'].toString());
+          notifyListeners();
+        }
+      }
+    }
   }
 
-  /// Hapus jadwal berdasarkan ID
-  void hapusJadwal(String id) {
+  Future<void> hapusJadwal(String id) async {
     _jadwalList.removeWhere((j) => j.id == id);
     notifyListeners();
+
+    if (AuthService.instance.isLoggedIn) {
+      await AuthService.instance.deleteJadwalOnServer(id);
+    }
   }
 
-  /// Edit jadwal (ganti data lama dengan data baru, pertahankan ID)
-  void editJadwal(String id, {
+  void editJadwal(
+    String id, {
     String? judul,
     DateTime? tanggal,
     bool? ulangi,
@@ -112,25 +158,30 @@ class JadwalService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Ganti seluruh item jadwal pada index tertentu
-  void gantiJadwal(String id, JadwalItem itemBaru) {
+  Future<void> gantiJadwal(String id, JadwalItem itemBaru) async {
     final idx = _jadwalList.indexWhere((j) => j.id == id);
     if (idx == -1) return;
     _jadwalList[idx] = itemBaru;
     notifyListeners();
+
+    if (AuthService.instance.isLoggedIn) {
+      await AuthService.instance.deleteJadwalOnServer(id);
+      final created = await AuthService.instance.createJadwalOnServer(
+        tugas: itemBaru.judul,
+        tanggalTugas: itemBaru.tanggal,
+      );
+      if (created != null && created['id_jadwal'] != null) {
+        final newIdx = _jadwalList.indexWhere((j) => j.id == itemBaru.id);
+        if (newIdx != -1) {
+          _jadwalList[newIdx] =
+              itemBaru.copyWith(id: created['id_jadwal'].toString());
+          notifyListeners();
+        }
+      }
+    }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // CHECKLIST & RECURRING
-  // ═══════════════════════════════════════════════════════════════
-
-  /// Toggle status selesai/belum selesai pada jadwal.
-  ///
-  /// Jika mencentang (selesai = true) dan jadwal memiliki pengulangan aktif,
-  /// maka otomatis membuat jadwal berikutnya sesuai frekuensi.
-  ///
-  /// Jika membatalkan centang (selesai = false), tidak membuat jadwal duplikat.
-  void toggleSelesai(JadwalItem item) {
+  Future<void> toggleSelesai(JadwalItem item) async {
     final idx = _jadwalList.indexWhere((j) => j.id == item.id);
     if (idx == -1) return;
 
@@ -139,26 +190,30 @@ class JadwalService extends ChangeNotifier {
 
     _jadwalList[idx] = jadwal.copyWith(selesai: baruSelesai);
 
-    if (baruSelesai && jadwal.ulangi && jadwal.frekuensi != FrekuensiUlang.tidakUlang) {
+    if (baruSelesai &&
+        jadwal.ulangi &&
+        jadwal.frekuensi != FrekuensiUlang.tidakUlang) {
       _buatJadwalRecurring(jadwal);
     }
 
     notifyListeners();
+
+    if (AuthService.instance.isLoggedIn) {
+      await AuthService.instance.toggleJadwalOnServer(jadwal.id);
+    }
   }
 
-  /// Buat jadwal berikutnya dari jadwal yang selesai (recurring).
-  /// Memastikan tidak ada duplikasi.
   void _buatJadwalRecurring(JadwalItem jadwalSelesai) {
     final tanggalBaru = jadwalSelesai.tanggalBerikutnya;
     final rootId = jadwalSelesai.parentId ?? jadwalSelesai.id;
 
-    // Cek apakah sudah ada jadwal berikutnya yang belum selesai untuk rantai ini
     final sudahAda = _jadwalList.any((j) {
       if (j.selesai) return false;
       final jRoot = j.parentId ?? j.id;
       if (jRoot != rootId && j.parentId != jadwalSelesai.id) return false;
       final tglJ = DateTime(j.tanggal.year, j.tanggal.month, j.tanggal.day);
-      final tglB = DateTime(tanggalBaru.year, tanggalBaru.month, tanggalBaru.day);
+      final tglB =
+          DateTime(tanggalBaru.year, tanggalBaru.month, tanggalBaru.day);
       return tglJ == tglB && j.judul == jadwalSelesai.judul;
     });
 
@@ -168,33 +223,29 @@ class JadwalService extends ChangeNotifier {
     }
   }
 
-  /// Proses jadwal recurring yang tertunda (misalnya saat aplikasi baru dibuka
-  /// setelah beberapa hari tidak aktif).
   void _prosesRecurringTertunda() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    // Kumpulkan jadwal recurring yang sudah selesai tapi belum punya penerus
     final jadwalSelesaiRecurring = _jadwalList
-        .where((j) => j.selesai && j.ulangi && j.frekuensi != FrekuensiUlang.tidakUlang)
+        .where((j) =>
+            j.selesai && j.ulangi && j.frekuensi != FrekuensiUlang.tidakUlang)
         .toList();
 
     for (final jadwal in jadwalSelesaiRecurring) {
       final rootId = jadwal.parentId ?? jadwal.id;
 
-      // Cek apakah sudah ada penerus yang belum selesai
       final adaPenerus = _jadwalList.any((j) {
         if (j.selesai) return false;
         final jRoot = j.parentId ?? j.id;
-        return (jRoot == rootId || j.parentId == jadwal.id) && j.judul == jadwal.judul;
+        return (jRoot == rootId || j.parentId == jadwal.id) &&
+            j.judul == jadwal.judul;
       });
 
       if (!adaPenerus) {
-        // Buat penerus — mungkin perlu mengejar beberapa hari/minggu
         var tanggalBaru = jadwal.tanggalBerikutnya;
         final tanggalHariIni = DateTime(today.year, today.month, today.day);
 
-        // Jika tanggalBaru sudah lewat, geser ke depan sampai >= hari ini
         while (DateTime(tanggalBaru.year, tanggalBaru.month, tanggalBaru.day)
             .isBefore(tanggalHariIni)) {
           if (jadwal.frekuensi == FrekuensiUlang.sekaliSehari) {
@@ -219,14 +270,8 @@ class JadwalService extends ChangeNotifier {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // PERSISTENCE HELPERS
-  // ═══════════════════════════════════════════════════════════════
-
-  /// Serialisasi seluruh data jadwal ke JSON string
   String toJsonString() => JadwalItem.encodeList(_jadwalList);
 
-  /// Kembalikan ke keadaan awal (untuk testing)
   void reset() {
     _jadwalList.clear();
     _initialized = false;

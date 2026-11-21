@@ -191,7 +191,7 @@ class _LupaPasswordScreenState extends State<LupaPasswordScreen> {
                       'assets/images/logo_gerak.png',
                       width: 86,
                       height: 86,
-                      errorBuilder: (_, __, ___) => const Icon(
+                      errorBuilder: (_, _, _) => const Icon(
                         Icons.lock_reset_rounded,
                         size: 70,
                         color: AppColors.primary,

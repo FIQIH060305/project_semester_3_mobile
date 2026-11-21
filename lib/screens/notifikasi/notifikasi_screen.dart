@@ -1,7 +1,54 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../services/auth_service.dart';
 
-class NotifikasiScreen extends StatelessWidget {
+class NotifikasiScreen extends StatefulWidget {
   const NotifikasiScreen({super.key});
+
+  @override
+  State<NotifikasiScreen> createState() => _NotifikasiScreenState();
+}
+
+class _NotifikasiScreenState extends State<NotifikasiScreen> {
+  bool _isLoading = true;
+  List<JsonMap> _items = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifikasi();
+  }
+
+  Future<void> _loadNotifikasi() async {
+    setState(() => _isLoading = true);
+    final data = await AuthService.instance.fetchNotifikasiList();
+    if (!mounted) return;
+    setState(() {
+      _items = data;
+      _isLoading = false;
+    });
+    AuthService.instance.markNotifikasiReadOnServer();
+  }
+
+  String _formatJam(String? iso) {
+    if (iso == null || iso.isEmpty) return 'Baru saja';
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return 'Baru saja';
+    return DateFormat('HH.mm').format(dt);
+  }
+
+  String _formatTanggalHeader(String? iso) {
+    if (iso == null || iso.isEmpty) return 'Terbaru';
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return 'Terbaru';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(dt.year, dt.month, dt.day);
+    final diff = today.difference(target).inDays;
+    if (diff == 0) return 'Hari ini';
+    if (diff == 1) return 'Kemarin';
+    return DateFormat('EEEE, d MMMM y', 'id_ID').format(dt);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,103 +84,101 @@ class NotifikasiScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-        children: [
-          // ── HARI INI ─────────────────────────────────────────────────
-          _buildSectionHeader(
-            tanggalLabel: 'Hari ini',
-            tanggalSub: 'Selasa, 20 Oktober 2026',
-          ),
-          const SizedBox(height: 12),
+      body: RefreshIndicator(
+        onRefresh: _loadNotifikasi,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _items.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      const SizedBox(height: 120),
+                      Icon(
+                        Icons.notifications_none_rounded,
+                        size: 64,
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Belum ada notifikasi baru',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Pengingat jadwal latihan & progresmu akan muncul di sini.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 12),
+                    itemCount: _items.length,
+                    itemBuilder: (context, index) {
+                      final item = _items[index];
+                      final waktuIso = item['waktu_kirim']?.toString();
+                      final prevIso = index > 0
+                          ? _items[index - 1]['waktu_kirim']?.toString()
+                          : null;
 
-          // 1. Aktifitas
-          _buildNotifCard(
-            stripeColor: const Color(0xFF3B82F6),
-            iconContainerBg: const Color(0xFFBFDBFE),
-            icon: Icons.directions_run_rounded,
-            iconColor: const Color(0xFF2563EB),
-            badgeLabel: 'Aktifitas',
-            badgeBg: const Color(0xFFDBEAFE),
-            badgeTextColor: const Color(0xFF2563EB),
-            time: '07.00',
-            title: 'Jalan 20 menit',
-            desc1: 'Kamu sudah menyelesaikan aktifitas hari ini.',
-            desc2: 'Luar biasa tetap semangat!!!',
-          ),
-          const SizedBox(height: 12),
+                      final labelHari = _formatTanggalHeader(waktuIso);
+                      final showHeader = index == 0 ||
+                          labelHari != _formatTanggalHeader(prevIso);
 
-          // 2. Makanan
-          _buildNotifCard(
-            stripeColor: const Color(0xFF10B981),
-            iconContainerBg: const Color(0xFFA7F3D0),
-            icon: Icons.rice_bowl_rounded,
-            iconColor: const Color(0xFF059669),
-            badgeLabel: 'Makanan',
-            badgeBg: const Color(0xFFD1FAE5),
-            badgeTextColor: const Color(0xFF059669),
-            time: '07.30',
-            title: 'Cek Berat Badan Kamu',
-            desc1: 'Sudah 3 hari belum diperbarui',
-            desc2: 'Yuk, Catat berat badanmu sekarang!',
-          ),
-          const SizedBox(height: 12),
+                      final sudahDibaca = item['status_dibaca'] == true;
 
-          // 3. Progres
-          _buildNotifCard(
-            stripeColor: const Color(0xFFA855F7),
-            iconContainerBg: const Color(0xFFF3E8FF),
-            icon: Icons.menu_book_rounded,
-            iconColor: const Color(0xFF9333EA),
-            badgeLabel: 'Progres',
-            badgeBg: const Color(0xFFF3E8FF),
-            badgeTextColor: const Color(0xFF9333EA),
-            time: '08.00',
-            title: 'Berat badan turun 1,5 Kg',
-            desc1: 'Proses minggu ini bagus tetap pertahankan',
-            desc2: 'Luar biasa tetap semangat!!!',
-          ),
-          const SizedBox(height: 24),
-
-          // ── KEMARIN ──────────────────────────────────────────────────
-          _buildSectionHeader(
-            tanggalLabel: 'Kemarin',
-            tanggalSub: 'Senin, 19 Oktober 2026',
-          ),
-          const SizedBox(height: 12),
-
-          // 4. Kalori
-          _buildNotifCard(
-            stripeColor: const Color(0xFFF97316),
-            iconContainerBg: const Color(0xFFFED7AA),
-            icon: Icons.local_fire_department_rounded,
-            iconColor: const Color(0xFFEA580C),
-            badgeLabel: 'Kalori',
-            badgeBg: const Color(0xFFFFEDD5),
-            badgeTextColor: const Color(0xFFEA580C),
-            time: '08.00',
-            title: 'Kamu Membakar 320 Kalori',
-            desc1: 'Hebat pembakaran kalori minggu ini',
-            desc2: 'sudah cukup tinggi',
-          ),
-          const SizedBox(height: 12),
-
-          // 5. Jadwal
-          _buildNotifCard(
-            stripeColor: const Color(0xFF3B82F6),
-            iconContainerBg: const Color(0xFFBFDBFE),
-            icon: Icons.equalizer_rounded,
-            iconColor: const Color(0xFF2563EB),
-            badgeLabel: 'Jadwal',
-            badgeBg: const Color(0xFFDBEAFE),
-            badgeTextColor: const Color(0xFF2563EB),
-            time: '08.00',
-            title: 'Admin membagikan jadwal\nberjalan 30 menit',
-            desc1: 'Luar biasa tetap semangat!!!',
-            desc2: null,
-          ),
-          const SizedBox(height: 20),
-        ],
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (showHeader) ...[
+                            if (index > 0) const SizedBox(height: 14),
+                            _buildSectionHeader(
+                              tanggalLabel: labelHari,
+                              tanggalSub: waktuIso != null
+                                  ? DateFormat('d MMMM y', 'id_ID').format(
+                                      DateTime.tryParse(waktuIso)?.toLocal() ??
+                                          DateTime.now())
+                                  : '',
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _buildNotifCard(
+                              stripeColor: sudahDibaca
+                                  ? const Color(0xFF93C5FD)
+                                  : const Color(0xFF2563EB),
+                              iconContainerBg: const Color(0xFFBFDBFE),
+                              icon: Icons.event_available_rounded,
+                              iconColor: const Color(0xFF2563EB),
+                              badgeLabel: sudahDibaca ? 'Dibaca' : 'Baru',
+                              badgeBg: sudahDibaca
+                                  ? const Color(0xFFE2E8F0)
+                                  : const Color(0xFFDBEAFE),
+                              badgeTextColor: sudahDibaca
+                                  ? const Color(0xFF475569)
+                                  : const Color(0xFF2563EB),
+                              time: _formatJam(waktuIso),
+                              title: item['judul']?.toString() ??
+                                  'Pengingat Latihan GERAK',
+                              desc1: item['pesan']?.toString() ?? '',
+                              desc2: 'Tetap konsisten capai targetmu!',
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
       ),
     );
   }
@@ -144,7 +189,6 @@ class NotifikasiScreen extends StatelessWidget {
   }) {
     return Row(
       children: [
-        // Kalender dengan jam di pojok
         Container(
           width: 42,
           height: 42,
@@ -186,15 +230,17 @@ class NotifikasiScreen extends StatelessWidget {
                 color: Color(0xFF0F172A),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              tanggalSub,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w500,
+            if (tanggalSub.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                tanggalSub,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ],
@@ -216,14 +262,13 @@ class NotifikasiScreen extends StatelessWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFE8F1FF), // Soft light blue tint card
+        color: const Color(0xFFE8F1FF),
         borderRadius: BorderRadius.circular(16),
       ),
       child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Left colored stripe
             Container(
               width: 12,
               decoration: BoxDecoration(
@@ -234,15 +279,12 @@ class NotifikasiScreen extends StatelessWidget {
                 ),
               ),
             ),
-
-            // Card content
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Icon container
                     Container(
                       width: 44,
                       height: 44,
@@ -253,13 +295,10 @@ class NotifikasiScreen extends StatelessWidget {
                       child: Icon(icon, color: iconColor, size: 24),
                     ),
                     const SizedBox(width: 12),
-
-                    // Text column
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Badge + Time row
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -290,8 +329,6 @@ class NotifikasiScreen extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 6),
-
-                          // Title
                           Text(
                             title,
                             style: const TextStyle(
@@ -302,8 +339,6 @@ class NotifikasiScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
-
-                          // Description
                           Text(
                             desc1,
                             style: const TextStyle(

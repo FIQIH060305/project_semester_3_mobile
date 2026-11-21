@@ -401,7 +401,7 @@ class _PelacakanAktifScreenState extends State<PelacakanAktifScreen> {
             Image.asset(
               'assets/images/logo_gerak.png',
               height: 28,
-              errorBuilder: (_, __, ___) => Container(
+              errorBuilder: (_, _, _) => Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0077E6),

@@ -133,7 +133,7 @@ class _RingkasanSesiScreenState extends State<RingkasanSesiScreen> {
                   Image.asset(
                     'assets/images/logo_gerak.png',
                     height: 48,
-                    errorBuilder: (_, __, ___) => Row(
+                    errorBuilder: (_, _, _) => Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Container(

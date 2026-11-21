@@ -1,5 +1,6 @@
 /// Kumpulan fungsi validasi input, dipakai bareng oleh halaman Login,
 /// Registrasi, dan Lengkapi Profil.
+library;
 
 class Validators {
   Validators._();
