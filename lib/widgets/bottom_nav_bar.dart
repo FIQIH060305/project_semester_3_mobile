@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import '../screens/sesi/sesi_olahraga_screen.dart';
 
 class AppBottomNavBar extends StatelessWidget {
-  final int currentIndex; // 0=Home/Dashboard, 1=Jadwal, 2=Tracking, 3=Progres, 4=Profile
+  final int currentIndex; // 0=Home, 1=Jadwal, 2=Tracking, 3=Progres, 4=Profile
   final ValueChanged<int>? onTap;
 
-  static const Color primaryBlue = Color(0xFF0063A8);
-  static const Color inactiveGrey = Color(0xFF9E9E9E);
+  static const Color primaryBlue = Color(0xFF0066CC);
+  static const Color accentSkyBlue = Color(0xFF0077E6);
+  static const Color inactiveGrey = Color(0xFF94A3B8);
   static const Color navBg = Colors.white;
 
   const AppBottomNavBar({
@@ -21,7 +22,6 @@ class AppBottomNavBar extends StatelessWidget {
       return;
     }
 
-    // Fallback jika BottomNavBar dipanggil tanpa callback onTap (navigasi langsung)
     if (index == currentIndex) return;
 
     if (index == 2) {
@@ -46,25 +46,30 @@ class AppBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTrackingActive = currentIndex == 2;
+
     return Container(
       color: Colors.transparent,
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
           // ── Container Bar Utama ────────────────────────────────────
           Container(
-            height: 68,
+            height: 66,
             decoration: BoxDecoration(
               color: navBg,
-              borderRadius: BorderRadius.circular(34),
-              border: Border.all(color: const Color(0xFFBFDBFE), width: 1.4),
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(
+                color: const Color(0xFFE2E8F0),
+                width: 1.1,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: primaryBlue.withValues(alpha: 0.10),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
+                  color: const Color(0xFF0F172A).withValues(alpha: 0.07),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
@@ -87,11 +92,10 @@ class AppBottomNavBar extends StatelessWidget {
                   label: 'Jadwal',
                   activeIcon: Icons.calendar_month_rounded,
                   inactiveIcon: Icons.calendar_month_outlined,
-                  showClockBadge: true,
                 ),
 
                 // Spacer untuk tombol tengah Tracking
-                const SizedBox(width: 52),
+                const SizedBox(width: 60),
 
                 // 4. Progres (index 3)
                 _buildProgresItem(context),
@@ -108,7 +112,7 @@ class AppBottomNavBar extends StatelessWidget {
             ),
           ),
 
-          // ── 3. Tombol Tengah Tracking (Elevated Floating Button) ──
+          // ── 3. Tombol Tengah Tracking (Elevated Sport Button) ──────
           Positioned(
             top: -18,
             child: GestureDetector(
@@ -117,21 +121,28 @@ class AppBottomNavBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 52,
-                    height: 52,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    width: 56,
+                    height: 56,
                     decoration: BoxDecoration(
-                      color: currentIndex == 2
-                          ? primaryBlue
-                          : const Color(0xFF4B8EE5),
+                      gradient: LinearGradient(
+                        colors: isTrackingActive
+                            ? const [Color(0xFF005BB5), Color(0xFF0077E6)]
+                            : const [Color(0xFF0077E6), Color(0xFF38BDF8)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                       shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white,
+                        width: 3,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: (currentIndex == 2
-                                  ? primaryBlue
-                                  : const Color(0xFF4B8EE5))
-                              .withValues(alpha: 0.35),
-                          blurRadius: 10,
+                          color: accentSkyBlue.withValues(
+                              alpha: isTrackingActive ? 0.45 : 0.30),
+                          blurRadius: isTrackingActive ? 14 : 10,
                           offset: const Offset(0, 4),
                         ),
                       ],
@@ -139,16 +150,17 @@ class AppBottomNavBar extends StatelessWidget {
                     child: const Icon(
                       Icons.directions_run_rounded,
                       color: Colors.white,
-                      size: 28,
+                      size: 27,
                     ),
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     'Tracking',
                     style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: currentIndex == 2 ? FontWeight.w800 : FontWeight.w600,
-                      color: currentIndex == 2 ? primaryBlue : inactiveGrey,
+                      fontSize: 10.5,
+                      fontWeight:
+                          isTrackingActive ? FontWeight.w800 : FontWeight.w700,
+                      color: isTrackingActive ? primaryBlue : inactiveGrey,
                     ),
                   ),
                 ],
@@ -167,7 +179,6 @@ class AppBottomNavBar extends StatelessWidget {
     required String label,
     required IconData activeIcon,
     required IconData inactiveIcon,
-    bool showClockBadge = false,
   }) {
     final isSelected = currentIndex == index;
 
@@ -175,53 +186,32 @@ class AppBottomNavBar extends StatelessWidget {
       onTap: () => _handleItemTap(context, index),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
         padding: isSelected
-            ? const EdgeInsets.symmetric(horizontal: 10, vertical: 5)
-            : const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            ? const EdgeInsets.symmetric(horizontal: 11, vertical: 6)
+            : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
         decoration: BoxDecoration(
-          color: isSelected ? primaryBlue : Colors.transparent,
+          color: isSelected
+              ? const Color(0xFFEFF6FF)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            showClockBadge && !isSelected
-                ? Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Icon(inactiveIcon, color: inactiveGrey, size: 22),
-                      Positioned(
-                        right: -3,
-                        bottom: -2,
-                        child: Container(
-                          padding: const EdgeInsets.all(1.2),
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.access_time_filled_rounded,
-                            size: 10,
-                            color: inactiveGrey,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Icon(
-                    isSelected ? activeIcon : inactiveIcon,
-                    color: isSelected ? Colors.white : inactiveGrey,
-                    size: 22,
-                  ),
-            const SizedBox(height: 1.5),
+            Icon(
+              isSelected ? activeIcon : inactiveIcon,
+              color: isSelected ? primaryBlue : inactiveGrey,
+              size: 22,
+            ),
+            const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.white : inactiveGrey,
-                fontSize: 9.5,
+                color: isSelected ? primaryBlue : inactiveGrey,
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
               ),
             ),
@@ -234,19 +224,21 @@ class AppBottomNavBar extends StatelessWidget {
   // ── Progres Item dengan Ikon Bar Vertikal ─────────────────────────
   Widget _buildProgresItem(BuildContext context) {
     final isSelected = currentIndex == 3;
-    final iconColor = isSelected ? Colors.white : inactiveGrey;
+    final iconColor = isSelected ? primaryBlue : inactiveGrey;
 
     return GestureDetector(
       onTap: () => _handleItemTap(context, 3),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
         padding: isSelected
-            ? const EdgeInsets.symmetric(horizontal: 10, vertical: 5)
-            : const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            ? const EdgeInsets.symmetric(horizontal: 11, vertical: 6)
+            : const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
         decoration: BoxDecoration(
-          color: isSelected ? primaryBlue : Colors.transparent,
+          color: isSelected
+              ? const Color(0xFFEFF6FF)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
@@ -281,19 +273,20 @@ class AppBottomNavBar extends StatelessWidget {
                     width: 3.5,
                     height: 9,
                     decoration: BoxDecoration(
-                      color: iconColor.withValues(alpha: isSelected ? 0.8 : 0.6),
+                      color:
+                          iconColor.withValues(alpha: isSelected ? 0.85 : 0.65),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 1.5),
+            const SizedBox(height: 2),
             Text(
               'Progres',
               style: TextStyle(
-                color: isSelected ? Colors.white : inactiveGrey,
-                fontSize: 9.5,
+                color: isSelected ? primaryBlue : inactiveGrey,
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
               ),
             ),

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/app_colors.dart';
 import '../../models/riwayat_item.dart';
-import '../../services/auth_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/gerak_animations.dart';
 import '../main_navigation_screen.dart';
@@ -17,8 +15,7 @@ class RiwayatOlahragaScreen extends StatefulWidget {
 
 class _RiwayatOlahragaScreenState extends State<RiwayatOlahragaScreen> {
   String filter = 'Semua';
-  List<RiwayatItem> semuaRiwayat = [];
-  bool _isLoading = true;
+  late final RiwayatService _riwayatService;
 
   static const List<String> _namaBulan = [
     '',
@@ -39,70 +36,19 @@ class _RiwayatOlahragaScreenState extends State<RiwayatOlahragaScreen> {
   @override
   void initState() {
     super.initState();
-    _loadRiwayatDariServer();
+    _riwayatService = RiwayatService.instance;
+    _riwayatService.initialize(forceRefresh: true);
+    _riwayatService.addListener(_onChanged);
   }
 
-  Future<void> _loadRiwayatDariServer() async {
-    setState(() => _isLoading = true);
-    try {
-      final rawList = await AuthService.instance.fetchRiwayatOlahraga();
-      if (!mounted) return;
+  @override
+  void dispose() {
+    _riwayatService.removeListener(_onChanged);
+    super.dispose();
+  }
 
-      final mapped = rawList.map((row) {
-        final jenisRaw = (row['jenis_olahraga'] ?? 'Berlari').toString();
-        final jenisNormalized = jenisRaw.toLowerCase().contains('jalan')
-            ? 'Berjalan'
-            : 'Berlari';
-
-        final jarak = double.tryParse(row['jarak_km']?.toString() ?? '0') ?? 0.0;
-        final durasiDetik =
-            int.tryParse(row['durasi_detik']?.toString() ?? '0') ?? 0;
-        final langkah =
-            int.tryParse(row['jumlah_langkah']?.toString() ?? '0') ?? 0;
-        final kalori =
-            (double.tryParse(row['kalori_terbakar']?.toString() ?? '0') ?? 0.0)
-                .round();
-
-        DateTime tanggal = DateTime.now();
-        final createdStr =
-            (row['created_at'] ?? row['tanggal'] ?? '').toString();
-        if (createdStr.isNotEmpty) {
-          tanggal = DateTime.tryParse(createdStr)?.toLocal() ?? DateTime.now();
-        }
-
-        final menit = (durasiDetik / 60).round().clamp(1, 9999);
-        final avgSpeedKmh = durasiDetik > 0
-            ? (jarak / (durasiDetik / 3600.0)).clamp(1.0, 30.0)
-            : (jenisNormalized == 'Berlari' ? 8.5 : 4.5);
-
-        final series = <double>[
-          double.parse((avgSpeedKmh * 0.75).toStringAsFixed(1)),
-          double.parse((avgSpeedKmh * 0.90).toStringAsFixed(1)),
-          double.parse((avgSpeedKmh * 1.05).toStringAsFixed(1)),
-          double.parse((avgSpeedKmh * 1.15).toStringAsFixed(1)),
-          double.parse((avgSpeedKmh * 1.10).toStringAsFixed(1)),
-          double.parse((avgSpeedKmh * 0.95).toStringAsFixed(1)),
-          double.parse((avgSpeedKmh * 0.85).toStringAsFixed(1)),
-        ];
-
-        return RiwayatItem(
-          id: (row['id_aktivitas'] ?? row['id'] ?? '').toString(),
-          jenis: jenisNormalized,
-          tanggal: tanggal,
-          jarakKm: double.parse(jarak.toStringAsFixed(2)),
-          kalori: kalori,
-          waktuMenit: menit,
-          langkah: langkah,
-          kecepatanSeries: series,
-        );
-      }).toList();
-
-      setState(() {
-        semuaRiwayat = mapped;
-      });
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  void _onChanged() {
+    if (mounted) setState(() {});
   }
 
   String _formatTanggal(DateTime dt) {
@@ -114,53 +60,136 @@ class _RiwayatOlahragaScreenState extends State<RiwayatOlahragaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final semua = _riwayatService.semuaRiwayat;
     final list = filter == 'Semua'
-        ? semuaRiwayat
-        : semuaRiwayat.where((r) => r.jenis == filter).toList();
+        ? semua
+        : semua.where((r) => r.jenis == filter).toList();
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: GestureDetector(
-          onTap: () {
-            final nav = MainNavigationController.of(context);
-            if (nav != null) {
-              nav.switchTab(0);
-            } else if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            } else {
-              Navigator.of(context).pushReplacementNamed('/dashboard');
-            }
-          },
-          child: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: AppColors.brand,
-            size: 22,
-          ),
-        ),
-        iconTheme: const IconThemeData(color: AppColors.textDark),
-        title: const Text(
-          'Riwayat Olahraga',
-          style: TextStyle(
-            color: AppColors.textDark,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        actions: [
-          IconButton(
-            onPressed: _loadRiwayatDariServer,
-            icon: const Icon(Icons.refresh_rounded, color: AppColors.brand),
-            tooltip: 'Muat Ulang Riwayat',
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFF7FAFF),
       body: SafeArea(
         child: Column(
           children: [
+            // ── Header Modern ──────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
+              child: Row(
+                children: [
+                  Material(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        final nav = MainNavigationController.of(context);
+                        if (nav != null) {
+                          nav.switchTab(0);
+                        } else if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        } else {
+                          Navigator.of(context)
+                              .pushReplacementNamed('/dashboard');
+                        }
+                      },
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Color(0xFF0077E6),
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Riwayat Aktivitas',
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        Text(
+                          'Catatan seluruh sesi jalan & larimu',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _riwayatService.syncFromServer,
+                    icon: const Icon(Icons.refresh_rounded,
+                        color: Color(0xFF0077E6)),
+                    tooltip: 'Muat Ulang Riwayat',
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Kartu Ringkasan Akumulasi Aktivitas ────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 2, 18, 10),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    _buildMiniRecap(
+                      'Total Sesi',
+                      '${_riwayatService.totalAktivitas}',
+                      const Color(0xFF0077E6),
+                    ),
+                    _buildDivider(),
+                    _buildMiniRecap(
+                      'Total Jarak',
+                      '${_riwayatService.totalJarakKm.toStringAsFixed(1)} km',
+                      const Color(0xFF0284C7),
+                    ),
+                    _buildDivider(),
+                    _buildMiniRecap(
+                      'Total Durasi',
+                      '${_riwayatService.totalDurasiMenit} mnt',
+                      const Color(0xFF10B981),
+                    ),
+                    _buildDivider(),
+                    _buildMiniRecap(
+                      'Est. Kalori',
+                      '${_riwayatService.totalKalori} kcal',
+                      const Color(0xFFF59E0B),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Filter Jenis Aktivitas ─────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 2, 18, 12),
               child: Row(
                 children: ['Semua', 'Berjalan', 'Berlari'].map((f) {
                   final aktif = filter == f;
@@ -169,21 +198,36 @@ class _RiwayatOlahragaScreenState extends State<RiwayatOlahragaScreen> {
                     child: GestureDetector(
                       onTap: () => setState(() => filter = f),
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: aktif ? AppColors.brand : AppColors.badgeBg,
+                          color: aktif
+                              ? const Color(0xFF0077E6)
+                              : Colors.white,
                           borderRadius: BorderRadius.circular(20),
+                          boxShadow: aktif
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF0077E6)
+                                        .withValues(alpha: 0.25),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ]
+                              : [],
                         ),
                         child: Text(
                           f,
                           style: TextStyle(
-                            color: aktif ? Colors.white : AppColors.brand,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
+                            color: aktif
+                                ? Colors.white
+                                : const Color(0xFF475569),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12.5,
                           ),
                         ),
                       ),
@@ -192,134 +236,222 @@ class _RiwayatOlahragaScreenState extends State<RiwayatOlahragaScreen> {
                 }).toList(),
               ),
             ),
+
+            // ── Daftar Riwayat ─────────────────────────────────────
             Expanded(
               child: RefreshIndicator(
-                onRefresh: _loadRiwayatDariServer,
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                color: const Color(0xFF0077E6),
+                onRefresh: _riwayatService.syncFromServer,
+                child: _riwayatService.isLoading && list.isEmpty
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF0077E6),
+                        ),
+                      )
                     : list.isEmpty
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.all(24),
                             children: [
-                              const SizedBox(height: 80),
-                              Icon(
-                                Icons.directions_run_rounded,
-                                size: 64,
-                                color: AppColors.brand.withValues(alpha: 0.35),
-                              ),
-                              const SizedBox(height: 14),
-                              const Text(
-                                'Belum ada riwayat aktivitas',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textDark,
+                              const SizedBox(height: 40),
+                              Container(
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(22),
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 40),
-                                child: Text(
-                                  'Mulai sesi jalan atau lari pada menu Tracking untuk mencatat aktivitas pertamamu.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.textGrey,
-                                    height: 1.4,
-                                  ),
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      width: 60,
+                                      height: 60,
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFEFF6FF),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.directions_run_rounded,
+                                        size: 30,
+                                        color: Color(0xFF0077E6),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    const Text(
+                                      'Belum ada riwayat aktivitas',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    const Text(
+                                      'Mulai sesi jalan kaki atau berlari pada menu Tracking untuk mencatat aktivitas pertamamu.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: Color(0xFF64748B),
+                                        height: 1.45,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           )
                         : ListView.builder(
                             physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
                             itemCount: list.length,
                             itemBuilder: (context, i) {
                               final r = list[i];
+                              final isJalan = r.jenis == 'Berjalan';
+
                               return GerakEntrance(
-                                delayMs: (i * 50).clamp(0, 350),
-                                child: GestureDetector(
-                                  onTap: () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          DetailRiwayatScreen(item: r),
-                                    ),
-                                  ),
-                                  child: Container(
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border:
-                                          Border.all(color: AppColors.border),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black
-                                              .withValues(alpha: 0.03),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 3),
+                                delayMs: (i * 45).clamp(0, 320),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: Material(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(18),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(18),
+                                      onTap: () => Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              DetailRiwayatScreen(item: r),
                                         ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 44,
-                                          height: 44,
-                                          decoration: BoxDecoration(
-                                            color: AppColors.badgeBg,
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                          child: Icon(
-                                            r.jenis == 'Berjalan'
-                                                ? Icons.directions_walk_rounded
-                                                : Icons.directions_run_rounded,
-                                            color: AppColors.brand,
-                                          ),
+                                      ),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
+                                          borderRadius:
+                                              BorderRadius.circular(18),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFF0F172A)
+                                                  .withValues(alpha: 0.03),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ],
                                         ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                r.jenis,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 14.5,
-                                                ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 46,
+                                              height: 46,
+                                              decoration: BoxDecoration(
+                                                color: isJalan
+                                                    ? const Color(0xFFE0F2FE)
+                                                    : const Color(0xFFDBEAFE),
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
                                               ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                _formatTanggal(r.tanggal),
-                                                style: const TextStyle(
-                                                  fontSize: 11.5,
-                                                  color: AppColors.textGrey,
-                                                ),
+                                              child: Icon(
+                                                isJalan
+                                                    ? Icons
+                                                        .directions_walk_rounded
+                                                    : Icons
+                                                        .directions_run_rounded,
+                                                color: const Color(0xFF0077E6),
+                                                size: 24,
                                               ),
-                                              const SizedBox(height: 5),
-                                              Text(
-                                                '${r.jarakKm} km  •  🔥 ${r.kalori} kal  •  ⏱ ${r.waktuFormat}',
-                                                style: const TextStyle(
-                                                  fontSize: 11.5,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: AppColors.textDark,
-                                                ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      Text(
+                                                        r.jenis,
+                                                        style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          fontSize: 15,
+                                                          color:
+                                                              Color(0xFF0F172A),
+                                                        ),
+                                                      ),
+                                                      if (r.rutePoints
+                                                          .isNotEmpty) ...[
+                                                        const SizedBox(width: 6),
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                                  horizontal: 7,
+                                                                  vertical: 2),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: const Color(
+                                                                0xFFEFF6FF),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        8),
+                                                          ),
+                                                          child: const Text(
+                                                            'Rute GPS',
+                                                            style: TextStyle(
+                                                              fontSize: 10,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                              color: Color(
+                                                                  0xFF0077E6),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    _formatTanggal(r.tanggal),
+                                                    style: const TextStyle(
+                                                      fontSize: 11.5,
+                                                      color: Color(0xFF64748B),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 6),
+                                                  Row(
+                                                    children: [
+                                                      _chipInfo(
+                                                        Icons.route_rounded,
+                                                        '${r.jarakKm.toStringAsFixed(2)} km',
+                                                        const Color(0xFF0077E6),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      _chipInfo(
+                                                        Icons.timer_outlined,
+                                                        r.waktuFormat,
+                                                        const Color(0xFF0284C7),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      _chipInfo(
+                                                        Icons
+                                                            .local_fire_department_rounded,
+                                                        '${r.kalori} kcal',
+                                                        const Color(0xFFF59E0B),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                            const Icon(
+                                              Icons.arrow_forward_ios_rounded,
+                                              size: 14,
+                                              color: Color(0xFF94A3B8),
+                                            ),
+                                          ],
                                         ),
-                                        const Icon(
-                                          Icons.arrow_forward_ios_rounded,
-                                          size: 14,
-                                          color: AppColors.brand,
-                                        ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -333,6 +465,63 @@ class _RiwayatOlahragaScreenState extends State<RiwayatOlahragaScreen> {
       ),
       bottomNavigationBar:
           widget.showBottomNav ? const AppBottomNavBar(currentIndex: 3) : null,
+    );
+  }
+
+  Widget _buildMiniRecap(String label, String value, Color accent) {
+    return Expanded(
+      child: Column(
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: accent,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(
+      width: 1,
+      height: 26,
+      color: const Color(0xFFF1F5F9),
+    );
+  }
+
+  Widget _chipInfo(IconData icon, String text, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 3),
+        Text(
+          text,
+          style: const TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF334155),
+          ),
+        ),
+      ],
     );
   }
 }

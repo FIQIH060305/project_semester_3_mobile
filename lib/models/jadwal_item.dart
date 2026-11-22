@@ -38,6 +38,7 @@ class JadwalItem {
     final selisihHari = tgl.difference(today).inDays;
 
     if (selisihHari < 0 && !selesai) return 'Terlambat';
+    if (selisihHari < 0 && selesai) return 'Selesai';
     if (selisihHari == 0) return 'Hari ini';
     if (selisihHari == 1) return 'Besok';
     return 'Minggu depan';
@@ -46,8 +47,27 @@ class JadwalItem {
   /// Label badge kecil di kartu
   String get labelBadge {
     if (selesai) return 'Tuntas';
+    if (kategoriWaktu == 'Terlambat') return 'Terlewat';
+    if (kategoriWaktu == 'Hari ini') return 'Hari ini';
     if (kategoriWaktu == 'Besok') return 'Besok';
-    return 'Nanti';
+    return 'Terjadwal';
+  }
+
+  /// Ekstrak informasi target durasi / repetisi / jarak dari judul latihan (jika ada)
+  String? get infoTargetLatihan {
+    final regex = RegExp(
+      r'(\d+(?:[.,]\d+)?\s*(?:menit|mnt|jam|detik|repetisi|rep|set|kali|km|meter|m))',
+      caseSensitive: false,
+    );
+    final match = regex.firstMatch(judul);
+    return match?.group(1);
+  }
+
+  /// Format jam singkat (contoh: 07.00)
+  String get jamFormatted {
+    final h = tanggal.hour.toString().padLeft(2, '0');
+    final m = tanggal.minute.toString().padLeft(2, '0');
+    return '$h.$m';
   }
 
   /// Hitung tanggal kemunculan berikutnya berdasarkan frekuensi
@@ -58,7 +78,7 @@ class JadwalItem {
       case FrekuensiUlang.sekaliSeminggu:
         return tanggal.add(const Duration(days: 7));
       case FrekuensiUlang.tidakUlang:
-        return tanggal; // Tidak ada berikutnya
+        return tanggal;
     }
   }
 
@@ -71,7 +91,7 @@ class JadwalItem {
       selesai: false,
       ulangi: ulangi,
       frekuensi: frekuensi,
-      parentId: parentId ?? id, // Simpan referensi ke jadwal induk
+      parentId: parentId ?? id,
     );
   }
 
@@ -122,33 +142,35 @@ class JadwalItem {
     );
   }
 
-  /// Encode seluruh list jadwal ke JSON string
   static String encodeList(List<JadwalItem> items) {
     return jsonEncode(items.map((e) => e.toJson()).toList());
   }
 
-  /// Decode JSON string ke list jadwal
   static List<JadwalItem> decodeList(String jsonStr) {
     final List<dynamic> list = jsonDecode(jsonStr);
-    return list.map((e) => JadwalItem.fromJson(e as Map<String, dynamic>)).toList();
+    return list
+        .map((e) => JadwalItem.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 }
 
-/// Data dummy awal (digunakan sekali saat pertama kali buka aplikasi)
+/// Data dummy awal (digunakan sekali saat mode offline pertama kali)
 List<JadwalItem> dataDummyJadwal() {
   final now = DateTime.now();
   return [
     JadwalItem(
       id: '1',
       judul: 'Jalan 20 menit',
-      tanggal: DateTime(now.year, now.month, now.day, 7, 0).subtract(const Duration(days: 1)),
+      tanggal: DateTime(now.year, now.month, now.day, 7, 0)
+          .subtract(const Duration(days: 1)),
       ulangi: true,
       frekuensi: FrekuensiUlang.sekaliSehari,
     ),
     JadwalItem(
       id: '2',
       judul: 'Jalan 20 menit',
-      tanggal: DateTime(now.year, now.month, now.day, 7, 0).subtract(const Duration(days: 2)),
+      tanggal: DateTime(now.year, now.month, now.day, 7, 0)
+          .subtract(const Duration(days: 2)),
       ulangi: true,
       frekuensi: FrekuensiUlang.sekaliSehari,
     ),

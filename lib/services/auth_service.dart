@@ -88,7 +88,7 @@ class AuthService extends ChangeNotifier {
   AuthService._();
   static final AuthService instance = AuthService._();
 
-  static const String baseUrl = 'http://192.168.1.11:8000/api/mobile';
+  static const String baseUrl = 'http://192.168.1.9:8000/api/mobile';
 
   AppUser? currentUser;
   String? authToken;

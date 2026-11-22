@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import '../../models/jadwal_item.dart';
+import '../../models/riwayat_item.dart';
 import '../../services/auth_service.dart';
 import '../../services/jadwal_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
@@ -22,9 +24,9 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   String _namaPengguna = AuthService.instance.currentUser?.name ?? 'Sobat GERAK';
-  int _langkahHariIni = 0;
-  double _kaloriHariIni = 0;
-  int _totalSesiBulanIni = 0;
+  int _serverLangkahHariIni = 0;
+  double _serverKaloriHariIni = 0;
+  int _serverTotalSesiBulanIni = 0;
 
   List<JsonMap> _edukasiList = [];
   final GlobalKey<WeeklyWeightCardState> _weightCardKey =
@@ -34,15 +36,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     AuthService.instance.addListener(_onAuthChanged);
-    JadwalService.instance.addListener(_onJadwalChanged);
+    JadwalService.instance.addListener(_onStateChanged);
+    RiwayatService.instance.addListener(_onStateChanged);
     JadwalService.instance.initialize();
+    RiwayatService.instance.initialize();
     _loadDashboardFromServer();
   }
 
   @override
   void dispose() {
     AuthService.instance.removeListener(_onAuthChanged);
-    JadwalService.instance.removeListener(_onJadwalChanged);
+    JadwalService.instance.removeListener(_onStateChanged);
+    RiwayatService.instance.removeListener(_onStateChanged);
     super.dispose();
   }
 
@@ -56,8 +61,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  void _onJadwalChanged() {
+  void _onStateChanged() {
     if (mounted) setState(() {});
+  }
+
+  int get _effectiveLangkahHariIni {
+    final lokalHariIni = RiwayatService.instance.aktivitasHariIni
+        .fold<int>(0, (sum, e) => sum + e.langkah);
+    return math.max(_serverLangkahHariIni, lokalHariIni);
+  }
+
+  double get _effectiveKaloriHariIni {
+    final lokalKalori = RiwayatService.instance.aktivitasHariIni
+        .fold<double>(0.0, (sum, e) => sum + e.kalori);
+    return math.max(_serverKaloriHariIni, lokalKalori);
+  }
+
+  int get _effectiveSesiBulanIni {
+    final now = DateTime.now();
+    final lokalBulanIni = RiwayatService.instance.semuaRiwayat
+        .where((e) => e.tanggal.year == now.year && e.tanggal.month == now.month)
+        .length;
+    return math.max(_serverTotalSesiBulanIni, lokalBulanIni);
   }
 
   Future<void> _loadDashboardFromServer({bool refreshWeightCard = false}) async {
@@ -65,6 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _weightCardKey.currentState?.loadWeeklyData();
     }
     await JadwalService.instance.syncFromServer();
+    await RiwayatService.instance.syncFromServer();
     final data = await AuthService.instance.fetchDashboardData();
     final edukasi = await AuthService.instance.fetchEdukasiList();
 
@@ -81,12 +107,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _namaPengguna = user['nama_lengkap']?.toString() ?? _namaPengguna;
         }
         if (hariIni != null) {
-          _langkahHariIni =
+          _serverLangkahHariIni =
               int.tryParse(hariIni['langkah']?.toString() ?? '') ?? 0;
-          _kaloriHariIni =
+          _serverKaloriHariIni =
               double.tryParse(hariIni['kalori']?.toString() ?? '') ?? 0;
         }
-        _totalSesiBulanIni =
+        _serverTotalSesiBulanIni =
             int.tryParse(data['total_sesi_bulan_ini']?.toString() ?? '') ?? 0;
       }
     });
@@ -244,6 +270,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildHeader() {
     final photoPath = AuthService.instance.currentUser?.photoPath;
+    final sesiBulanIni = _effectiveSesiBulanIni;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -297,7 +324,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const Text('🔥', style: TextStyle(fontSize: 14)),
                   const SizedBox(width: 5),
                   Text(
-                    '$_totalSesiBulanIni Sesi',
+                    '$sesiBulanIni Sesi',
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 12.5,
@@ -807,7 +834,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildLangkahCard() {
-    final ratio = (_langkahHariIni / 10000).clamp(0.0, 1.0);
+    final langkah = _effectiveLangkahHariIni;
+    final ratio = (langkah / 10000).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -837,7 +865,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 10),
           GerakAnimatedMetric(
-            targetValue: _langkahHariIni.toDouble(),
+            targetValue: langkah.toDouble(),
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w900,
@@ -861,7 +889,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildKaloriCard() {
-    final ratio = (_kaloriHariIni / 600).clamp(0.0, 1.0);
+    final kalori = _effectiveKaloriHariIni;
+    final ratio = (kalori / 600).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -892,7 +921,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 10),
           GerakAnimatedMetric(
-            targetValue: _kaloriHariIni,
+            targetValue: kalori,
             suffix: ' kcal',
             style: const TextStyle(
               fontSize: 20,

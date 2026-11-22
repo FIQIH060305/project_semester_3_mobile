@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
 import '../../models/riwayat_item.dart';
 import '../../widgets/mini_line_chart.dart';
+import '../sesi/widgets/osm_tracking_map.dart';
 import 'unduh_riwayat_screen.dart';
 
 class DetailRiwayatScreen extends StatelessWidget {
@@ -31,46 +32,78 @@ class DetailRiwayatScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    // Sesuaikan rasio kartu agar tetap muat dan tidak overflow di HP berlayar sempit
-    final double cardAspectRatio = screenWidth < 360 ? 1.3 : 1.45;
+    final double cardAspectRatio = screenWidth < 360 ? 1.3 : 1.48;
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: const Color(0xFFF7FAFF),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFF7FAFF),
         elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.textDark),
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Center(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: Color(0xFF0077E6),
+                  size: 17,
+                ),
+              ),
+            ),
+          ),
+        ),
         title: const Text(
-          'Detail Riwayat',
-          style: TextStyle(color: AppColors.textDark, fontWeight: FontWeight.w700),
+          'Detail Aktivitas',
+          style: TextStyle(
+            color: Color(0xFF0F172A),
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
         ),
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           children: [
             // Header Jenis & Waktu Aktivitas
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
                   Container(
-                    width: 46,
-                    height: 46,
+                    width: 48,
+                    height: 48,
                     decoration: BoxDecoration(
-                      color: AppColors.badgeBg,
+                      color: const Color(0xFFDBEAFE),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Icon(
                       item.jenis == 'Berjalan'
                           ? Icons.directions_walk_rounded
                           : Icons.directions_run_rounded,
-                      color: AppColors.brand,
+                      color: const Color(0xFF0077E6),
+                      size: 25,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -82,14 +115,21 @@ class DetailRiwayatScreen extends StatelessWidget {
                           item.jenis,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: Color(0xFF0F172A),
+                          ),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
                         Text(
                           '${item.tanggal.day} ${_namaBulan(item.tanggal.month)} ${item.tanggal.year} • ${item.tanggal.hour.toString().padLeft(2, '0')}.${item.tanggal.minute.toString().padLeft(2, '0')}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                          ),
                         ),
                       ],
                     ),
@@ -97,9 +137,39 @@ class DetailRiwayatScreen extends StatelessWidget {
                 ],
               ),
             ),
+
+            // Peta Rute Perjalanan OpenStreetMap (Jika Tersedia)
+            if (item.rutePoints.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.05),
+                      blurRadius: 14,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: OsmTrackingMap(
+                  rutePoints: item.rutePoints,
+                  posisiAwal: item.rutePoints.first,
+                  posisiSaatIni: item.rutePoints.last,
+                  followUser: false,
+                  isReadOnly: true,
+                  gpsStatusText: 'Rute Aktivitas (${item.rutePoints.length} titik)',
+                  gpsStatusColor: const Color(0xFF0077E6),
+                  onToggleFollow: () {},
+                ),
+              ),
+            ],
+
             const SizedBox(height: 14),
 
-            // Grid Kartu Statistik (Responsif tanpa overflow)
+            // Grid Kartu Statistik
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
@@ -110,31 +180,33 @@ class DetailRiwayatScreen extends StatelessWidget {
               children: [
                 _kartuStat(
                   Icons.route_rounded,
-                  AppColors.statRose,
-                  AppColors.statRoseBg,
-                  'Jarak',
+                  const Color(0xFF0077E6),
+                  const Color(0xFFDBEAFE),
+                  'Jarak Tempuh',
                   '${item.jarakKm.toStringAsFixed(2)} km',
                 ),
                 _kartuStat(
                   Icons.local_fire_department_rounded,
-                  AppColors.statAmber,
-                  AppColors.statAmberBg,
-                  'Kalori',
-                  '${item.kalori} kal',
+                  const Color(0xFFF59E0B),
+                  const Color(0xFFFEF3C7),
+                  'Estimasi Kalori',
+                  '${item.kalori} kcal',
                 ),
                 _kartuStat(
                   Icons.access_time_rounded,
-                  AppColors.statGreen,
-                  AppColors.statGreenBg,
-                  'Waktu',
-                  item.waktuFormat,
+                  const Color(0xFF0284C7),
+                  const Color(0xFFE0F2FE),
+                  'Durasi',
+                  item.durasiHms,
                 ),
                 _kartuStat(
                   Icons.directions_walk_rounded,
-                  AppColors.brand,
-                  AppColors.badgeBg,
-                  'Langkah',
-                  '${item.langkah}',
+                  const Color(0xFF0EA5E9),
+                  const Color(0xFFE0F2FE),
+                  'Jumlah Langkah',
+                  item.sensorLangkahTersedia
+                      ? '${item.langkah}'
+                      : 'Tidak tersedia',
                 ),
               ],
             ),
@@ -145,22 +217,40 @@ class DetailRiwayatScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.show_chart_rounded, size: 16, color: AppColors.brand),
-                      SizedBox(width: 6),
-                      Expanded(
+                      const Icon(Icons.show_chart_rounded,
+                          size: 18, color: Color(0xFF0077E6)),
+                      const SizedBox(width: 6),
+                      const Expanded(
                         child: Text(
                           'Grafik Kecepatan',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${item.kecepatanRataRataKmh.toStringAsFixed(1)} km/jam',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0077E6),
                         ),
                       ),
                     ],
@@ -170,46 +260,67 @@ class DetailRiwayatScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
 
             // Tombol Unduh Riwayat
             SizedBox(
               width: double.infinity,
+              height: 52,
               child: ElevatedButton.icon(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => UnduhRiwayatScreen(item: item)),
+                  MaterialPageRoute(
+                      builder: (_) => UnduhRiwayatScreen(item: item)),
                 ),
                 icon: const Icon(Icons.download_rounded, color: Colors.white),
-                label: const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    'Unduh Riwayat',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                label: const Text(
+                  'Unduh Laporan Aktivitas',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.brandDark,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                 ),
               ),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 24),
           ],
         ),
       ),
     );
   }
 
-  Widget _kartuStat(IconData icon, Color color, Color bg, String label, String nilai) {
+  Widget _kartuStat(
+      IconData icon, Color color, Color bg, String label, String nilai) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Icon(icon, color: color, size: 20),
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -219,7 +330,11 @@ class DetailRiwayatScreen extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   nilai,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
               ),
               const SizedBox(height: 2),
@@ -227,7 +342,11 @@ class DetailRiwayatScreen extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, color: AppColors.textGrey),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),

@@ -12,7 +12,8 @@ class JadwalService extends ChangeNotifier {
 
   List<JadwalItem> get semuaJadwal => List.unmodifiable(_jadwalList);
 
-  Future<void> initialize({List<JadwalItem>? savedData, bool forceRefresh = false}) async {
+  Future<void> initialize(
+      {List<JadwalItem>? savedData, bool forceRefresh = false}) async {
     if (_initialized && !forceRefresh) return;
     _initialized = true;
 
@@ -38,28 +39,37 @@ class JadwalService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Simpan metadata lokal (jam & pengaturan pengulangan) berdasarkan ID sebelum refresh
+      final existingById = {
+        for (final item in _jadwalList) item.id: item,
+      };
+
       final rows = await AuthService.instance.fetchJadwalList();
       _jadwalList.clear();
 
       for (final row in rows) {
+        final idStr = (row['id_jadwal'] ?? '').toString();
+        final prev = existingById[idStr];
         final tglRaw = row['tanggal_tugas']?.toString() ?? '';
         final parsedDate = DateTime.tryParse(tglRaw) ?? DateTime.now();
+
         final tglDenganJam = DateTime(
           parsedDate.year,
           parsedDate.month,
           parsedDate.day,
-          7,
-          0,
+          prev?.tanggal.hour ?? 7,
+          prev?.tanggal.minute ?? 0,
         );
 
         _jadwalList.add(
           JadwalItem(
-            id: (row['id_jadwal'] ?? '').toString(),
+            id: idStr,
             judul: (row['tugas'] ?? 'Latihan GERAK').toString(),
             tanggal: tglDenganJam,
             selesai: row['selesai'] == true,
-            ulangi: false,
-            frekuensi: FrekuensiUlang.tidakUlang,
+            ulangi: prev?.ulangi ?? false,
+            frekuensi: prev?.frekuensi ?? FrekuensiUlang.tidakUlang,
+            parentId: prev?.parentId,
           ),
         );
       }
@@ -70,20 +80,28 @@ class JadwalService extends ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // QUERIES
+  // QUERIES PENGELOMPOKAN
   // ═══════════════════════════════════════════════════════════════
 
   List<JadwalItem> get terlambat =>
-      _jadwalList.where((j) => j.kategoriWaktu == 'Terlambat').toList();
+      _jadwalList.where((j) => j.kategoriWaktu == 'Terlambat').toList()
+        ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
 
   List<JadwalItem> get hariIni =>
-      _jadwalList.where((j) => j.kategoriWaktu == 'Hari ini').toList();
+      _jadwalList.where((j) => j.kategoriWaktu == 'Hari ini').toList()
+        ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
 
   List<JadwalItem> get besok =>
-      _jadwalList.where((j) => j.kategoriWaktu == 'Besok').toList();
+      _jadwalList.where((j) => j.kategoriWaktu == 'Besok').toList()
+        ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
 
   List<JadwalItem> get mingguDepan =>
-      _jadwalList.where((j) => j.kategoriWaktu == 'Minggu depan').toList();
+      _jadwalList.where((j) => j.kategoriWaktu == 'Minggu depan').toList()
+        ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
+
+  List<JadwalItem> get riwayatSelesai =>
+      _jadwalList.where((j) => j.kategoriWaktu == 'Selesai').toList()
+        ..sort((a, b) => b.tanggal.compareTo(a.tanggal));
 
   int get jumlahBelumSelesai => _jadwalList.where((j) => !j.selesai).length;
 
@@ -193,7 +211,7 @@ class JadwalService extends ChangeNotifier {
     if (baruSelesai &&
         jadwal.ulangi &&
         jadwal.frekuensi != FrekuensiUlang.tidakUlang) {
-      _buatJadwalRecurring(jadwal);
+      await _buatJadwalRecurring(jadwal);
     }
 
     notifyListeners();
@@ -203,7 +221,7 @@ class JadwalService extends ChangeNotifier {
     }
   }
 
-  void _buatJadwalRecurring(JadwalItem jadwalSelesai) {
+  Future<void> _buatJadwalRecurring(JadwalItem jadwalSelesai) async {
     final tanggalBaru = jadwalSelesai.tanggalBerikutnya;
     final rootId = jadwalSelesai.parentId ?? jadwalSelesai.id;
 
@@ -220,6 +238,20 @@ class JadwalService extends ChangeNotifier {
     if (!sudahAda) {
       final jadwalBaru = jadwalSelesai.buatJadwalBerikutnya();
       _jadwalList.add(jadwalBaru);
+
+      if (AuthService.instance.isLoggedIn) {
+        final created = await AuthService.instance.createJadwalOnServer(
+          tugas: jadwalBaru.judul,
+          tanggalTugas: jadwalBaru.tanggal,
+        );
+        if (created != null && created['id_jadwal'] != null) {
+          final newIdx = _jadwalList.indexWhere((j) => j.id == jadwalBaru.id);
+          if (newIdx != -1) {
+            _jadwalList[newIdx] =
+                jadwalBaru.copyWith(id: created['id_jadwal'].toString());
+          }
+        }
+      }
     }
   }
 

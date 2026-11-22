@@ -21,12 +21,12 @@ class SplitKilometer {
   }
 }
 
-/// Helper kalkulator untuk metrik pelacakan olahraga
+/// Helper kalkulator untuk metrik pelacakan olahraga GERAK
 class TrackingCalculator {
   /// Radius bumi dalam meter untuk rumus Haversine
   static const double earthRadiusMeters = 6371000.0;
 
-  /// Menghitung jarak antara dua koordinat GPS menggunakan rumus Haversine (hasil dalam meter)
+  /// Menghitung jarak antara dua koordinat GPS menggunakan rumus Haversine (meter)
   static double hitungJarakHaversine({
     required double lat1,
     required double lon1,
@@ -51,18 +51,24 @@ class TrackingCalculator {
 
   static double _toRadians(double degree) => degree * math.pi / 180.0;
 
-  /// Memeriksa apakah titik GPS valid berdasarkan akurasi dan lompatan kecepatan tidak wajar
+  /// Penyaringan koordinat GPS agar terhindar dari noise diam dan lompatan sinyal
   static bool isTitikValid({
     required double distanceMeters,
     required double timeSeconds,
     required double accuracyMeters,
-    double maxAccuracyThreshold = 35.0, // Abaikan jika akurasi GPS > 35m
-    double minDisplacement = 2.0, // Abaikan noise < 2m saat diam
-    double maxSpeedKmh = 45.0, // Batas maksimal kecepatan jalan/lari
+    bool isBerlari = true,
+    double maxAccuracyThreshold = 30.0, // Abaikan sinyal dengan akurasi > 30m
+    double minDisplacement = 2.5, // Abaikan pergeseran mikro < 2.5m saat diam
   }) {
-    if (accuracyMeters > maxAccuracyThreshold) return false;
-    if (distanceMeters < minDisplacement) return false;
+    if (accuracyMeters <= 0 || accuracyMeters > maxAccuracyThreshold) {
+      return false;
+    }
+    if (distanceMeters < minDisplacement) {
+      return false;
+    }
 
+    // Batas kecepatan wajar sesuai jenis aktivitas (mencegah teleportasi GPS)
+    final double maxSpeedKmh = isBerlari ? 36.0 : 18.0;
     if (timeSeconds > 0) {
       final speedKmh = (distanceMeters / timeSeconds) * 3.6;
       if (speedKmh > maxSpeedKmh) return false;
@@ -77,9 +83,6 @@ class TrackingCalculator {
     required double tinggiBadanCm,
     required bool isBerlari,
   }) {
-    // Panjang langkah rata-rata:
-    // Berjalan: tinggi * 0.414
-    // Berlari: tinggi * 0.53
     final strideFactor = isBerlari ? 0.53 : 0.414;
     final strideLengthMeters = (tinggiBadanCm * strideFactor) / 100.0;
     if (strideLengthMeters <= 0.2) return 0;
@@ -92,15 +95,13 @@ class TrackingCalculator {
     required double speedKmh,
   }) {
     if (!isBerlari) {
-      // Aktivitas Berjalan
-      if (speedKmh < 3.2) return 2.2;
-      if (speedKmh <= 4.5) return 2.8; // Berjalan santai
-      if (speedKmh <= 5.5) return 3.5; // Berjalan sedang
+      if (speedKmh < 3.2) return 2.3;
+      if (speedKmh <= 4.5) return 3.0; // Berjalan santai
+      if (speedKmh <= 5.5) return 3.6; // Berjalan sedang
       if (speedKmh <= 6.5) return 4.3; // Berjalan cepat
       return 5.0; // Berjalan sangat cepat
     } else {
-      // Aktivitas Berlari
-      if (speedKmh < 7.5) return 6.0; // Jogging santai
+      if (speedKmh < 7.5) return 6.5; // Jogging ringan
       if (speedKmh <= 9.0) return 8.3; // Lari santai
       if (speedKmh <= 10.5) return 9.8; // Lari sedang
       if (speedKmh <= 12.0) return 11.0; // Lari cepat
@@ -108,8 +109,8 @@ class TrackingCalculator {
     }
   }
 
-  /// Menghitung kalori terbakar menggunakan pendekatan MET
-  /// Rumus: Kalori = MET × 3.5 × Berat Badan (kg) / 200 × Durasi (menit)
+  /// Menghitung estimasi kalori terbakar menggunakan rumus MET standar:
+  /// Kalori = (MET × 3.5 × Berat Badan [kg] / 200) × Durasi [menit]
   static double hitungKaloriMet({
     required double met,
     required double beratBadanKg,
@@ -119,24 +120,56 @@ class TrackingCalculator {
     return (met * 3.5 * beratBadanKg / 200.0) * durasiMenit;
   }
 
+  /// Format durasi menjadi HH:MM:SS
+  static String formatDurasiHms(int totalSeconds) {
+    final h = totalSeconds ~/ 3600;
+    final m = (totalSeconds % 3600) ~/ 60;
+    final s = totalSeconds % 60;
+    return '${h.toString().padLeft(2, '0')}:'
+        '${m.toString().padLeft(2, '0')}:' '${s.toString().padLeft(2, '0')}';
+  }
+
+  /// Format jarak adaptif: meter (m) jika < 1000 m, kilometer (km) jika >= 1000 m
+  static ({String nilai, String satuan}) formatJarakAdaptif(double meters) {
+    if (meters < 1000) {
+      return (nilai: meters.round().toString(), satuan: 'm');
+    }
+    final km = meters / 1000.0;
+    return (
+      nilai: km.toStringAsFixed(2).replaceAll('.', ','),
+      satuan: 'km',
+    );
+  }
+
   /// Format Pace (Menit'Detik" /km)
   static String formatPace(double paceMinPerKm) {
-    if (paceMinPerKm.isInfinite || paceMinPerKm.isNaN || paceMinPerKm <= 0 || paceMinPerKm > 60) {
+    if (paceMinPerKm.isInfinite ||
+        paceMinPerKm.isNaN ||
+        paceMinPerKm <= 0 ||
+        paceMinPerKm > 60) {
       return "--'--\" /km";
     }
     final minutes = paceMinPerKm.floor();
     final seconds = ((paceMinPerKm - minutes) * 60).round();
+    if (seconds == 60) {
+      return "${minutes + 1}’00” /km";
+    }
     return "$minutes’${seconds.toString().padLeft(2, '0')}” /km";
   }
 
   /// Format Pace pendek untuk split
   static String formatPaceShort(double paceMinPerKm) {
-    if (paceMinPerKm.isInfinite || paceMinPerKm.isNaN || paceMinPerKm <= 0 || paceMinPerKm > 60) {
+    if (paceMinPerKm.isInfinite ||
+        paceMinPerKm.isNaN ||
+        paceMinPerKm <= 0 ||
+        paceMinPerKm > 60) {
       return "--'--\"";
     }
     final minutes = paceMinPerKm.floor();
     final seconds = ((paceMinPerKm - minutes) * 60).round();
+    if (seconds == 60) {
+      return "${minutes + 1}’00”";
+    }
     return "$minutes’${seconds.toString().padLeft(2, '0')}”";
   }
 }
-
