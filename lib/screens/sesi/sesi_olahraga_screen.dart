@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -10,12 +11,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/riwayat_item.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
-import '../../widgets/gerak_animations.dart';
 import '../main_navigation_screen.dart';
 import '../riwayat/riwayat_olahraga_screen.dart';
 import 'ringkasan_sesi_screen.dart';
 import 'services/tracking_calculator.dart';
 import 'widgets/osm_tracking_map.dart';
+
+/// Controller global untuk menyinkronkan status sesi aktif dengan navigasi utama
+/// sehingga Bottom Navigation Bar hilang otomatis saat persiapan & sesi berlangsung.
+class TrackingSessionController {
+  TrackingSessionController._();
+  static final ValueNotifier<bool> isSessionActive = ValueNotifier<bool>(false);
+  static VoidCallback? onBackPressedDuringSession;
+}
 
 class SesiOlahragaScreen extends StatefulWidget {
   final bool showBottomNav;
@@ -28,9 +36,15 @@ class SesiOlahragaScreen extends StatefulWidget {
 class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   static const String _backupKey = 'gerak_active_tracking_backup';
+  static const int _durasiPersiapanDetik = 30;
 
   // ── Pilihan Jenis Aktivitas ──────────────────────────────────────────
   String _jenisAktivitas = 'Berlari'; // 'Berjalan' atau 'Berlari'
+
+  // ── Status Persiapan 30 Detik ────────────────────────────────────────
+  bool _isPreparing = false;
+  int _prepSecondsRemaining = _durasiPersiapanDetik;
+  Timer? _prepTimer;
 
   // ── Status Tracking & Timer Wall-Clock Akurat ────────────────────────
   bool _isTracking = false;
@@ -60,11 +74,11 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
   double _averageSpeedKmh = 0.0;
   double _caloriesBurned = 0.0;
 
-  // Sensor Langkah Hardware
+  // Sensor Langkah & Estimasi Langkah
   StreamSubscription<StepCount>? _stepSub;
   bool _sensorLangkahTersedia = false;
   int? _stepBaseline;
-  int _stepCount = 0;
+  int _sensorStepCount = 0;
 
   // Split Kilometer & Series Kecepatan
   final List<SplitKilometer> _splitList = [];
@@ -79,10 +93,32 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
 
   bool get _isBerlari => _jenisAktivitas == 'Berlari';
 
+  bool get _isInFocusMode => _isPreparing || _isTracking;
+
+  /// Menggunakan sensor langkah hardware jika tersedia & aktif,
+  /// atau estimasi langkah akurat berdasarkan jarak tempuh.
+  int get _effectiveSteps {
+    if (_sensorLangkahTersedia && _sensorStepCount > 0) {
+      return _sensorStepCount;
+    }
+    return TrackingCalculator.estimasiLangkahDariJarak(
+      jarakMeter: _totalDistanceMeters,
+      tinggiBadanCm: 170.0,
+      isBerlari: _isBerlari,
+    );
+  }
+
+  void _syncFocusNavigationState() {
+    TrackingSessionController.isSessionActive.value =
+        _isPreparing || _isTracking;
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    TrackingSessionController.onBackPressedDuringSession =
+        _handleBackDuringSession;
     _livePulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1100),
@@ -96,11 +132,27 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (TrackingSessionController.onBackPressedDuringSession ==
+        _handleBackDuringSession) {
+      TrackingSessionController.onBackPressedDuringSession = null;
+    }
+    _prepTimer?.cancel();
     _uiTimer?.cancel();
     _positionSub?.cancel();
     _stepSub?.cancel();
     _livePulseController.dispose();
+    if (!_isTracking && !_isPreparing) {
+      TrackingSessionController.isSessionActive.value = false;
+    }
     super.dispose();
+  }
+
+  void _handleBackDuringSession() {
+    if (_isPreparing) {
+      _batalkanPersiapan();
+    } else if (_isTracking) {
+      _konfirmasiSelesaikan();
+    }
   }
 
   @override
@@ -124,7 +176,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
         setState(() {
           _gpsServiceEnabled = false;
           _isGpsLoading = false;
-          _gpsStatusText = 'GPS mati • Aktifkan lokasi';
+          _gpsStatusText = 'GPS Nonaktif • Ketuk Aktifkan';
         });
       }
       return false;
@@ -148,8 +200,8 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
         setState(() {
           _isGpsLoading = false;
           _gpsStatusText = permission == LocationPermission.deniedForever
-              ? 'Izin lokasi diblokir'
-              : 'Izin lokasi diperlukan';
+              ? 'Izin Lokasi Diblokir'
+              : 'Izin Lokasi Diperlukan';
         });
       }
       return false;
@@ -184,7 +236,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
           _posisiAwal = coord;
         }
         _isGpsLoading = false;
-        _gpsStatusText = 'GPS Siap • ±${pos.accuracy.round()}m';
+        _gpsStatusText = 'GPS Siap • Akurasi ±${pos.accuracy.round()}m';
       });
     } catch (_) {
       if (!mounted) return;
@@ -278,7 +330,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
   }
 
   // ═════════════════════════════════════════════════════════════════════
-  // 2. SENSOR LANGKAH (HARDWARE PEDOMETER ONLY)
+  // 2. SENSOR LANGKAH (HARDWARE PEDOMETER + FALLBACK ESTIMASI)
   // ═════════════════════════════════════════════════════════════════════
 
   void _startStepSensor() {
@@ -289,16 +341,15 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
       _stepSub = Pedometer.stepCountStream.listen(
         (StepCount event) {
           if (!mounted) return;
-          _stepBaseline ??= event.steps - _stepCount;
+          _stepBaseline ??= event.steps - _sensorStepCount;
           if (!_isPaused) {
             final computed = event.steps - (_stepBaseline ?? event.steps);
             setState(() {
               _sensorLangkahTersedia = true;
-              _stepCount = computed >= 0 ? computed : 0;
+              _sensorStepCount = computed >= 0 ? computed : 0;
             });
           } else {
-            // Saat jeda, geser baseline agar langkah selama jeda tidak ikut dihitung
-            _stepBaseline = event.steps - _stepCount;
+            _stepBaseline = event.steps - _sensorStepCount;
           }
         },
         onError: (_) {
@@ -319,10 +370,10 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
   }
 
   // ═════════════════════════════════════════════════════════════════════
-  // 3. KONTROL MULAI, PAUSE, RESUME & SELESAI
+  // 3. FASE PERSIAPAN 30 DETIK & KONTROL SESI TRACKING
   // ═════════════════════════════════════════════════════════════════════
 
-  Future<void> _mulaiAktivitas() async {
+  Future<void> _mulaiPersiapan() async {
     HapticFeedback.mediumImpact();
 
     final gpsReady = await _ensureLocationReady(requestIfNeeded: true);
@@ -335,12 +386,59 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
     if (_posisiSaatIni == null) {
       await _initInitialGps();
     }
+    if (!mounted) return;
+
+    _prepTimer?.cancel();
+    setState(() {
+      _isPreparing = true;
+      _prepSecondsRemaining = _durasiPersiapanDetik;
+      _followUser = true;
+      _syncFocusNavigationState();
+    });
+
+    _prepTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || !_isPreparing) {
+        timer.cancel();
+        return;
+      }
+
+      if (_prepSecondsRemaining <= 1) {
+        timer.cancel();
+        _mulaiSesiAktif();
+      } else {
+        setState(() {
+          _prepSecondsRemaining -= 1;
+        });
+        if (_prepSecondsRemaining <= 3) {
+          HapticFeedback.selectionClick();
+        }
+      }
+    });
+  }
+
+  void _batalkanPersiapan() {
+    HapticFeedback.lightImpact();
+    _prepTimer?.cancel();
+    setState(() {
+      _isPreparing = false;
+      _prepSecondsRemaining = _durasiPersiapanDetik;
+      _syncFocusNavigationState();
+    });
+  }
+
+  Future<void> _mulaiSesiAktif() async {
+    _prepTimer?.cancel();
+    HapticFeedback.heavyImpact();
 
     final startCoord = _posisiSaatIni;
     final now = DateTime.now();
 
     setState(() {
+      _isPreparing = false;
+      _prepSecondsRemaining = _durasiPersiapanDetik;
       _isTracking = true;
+      _syncFocusNavigationState();
+
       _isPaused = false;
       _activeSegmentStart = now;
       _accumulatedActiveDuration = Duration.zero;
@@ -351,7 +449,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
       _averageSpeedKmh = 0.0;
       _caloriesBurned = 0.0;
 
-      _stepCount = 0;
+      _sensorStepCount = 0;
       _stepBaseline = null;
 
       _splitList.clear();
@@ -374,7 +472,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
     await _persistActiveBackup();
   }
 
-  void _pauseAktivitas() {
+  void _pauseSesi() {
     if (!_isTracking || _isPaused) return;
     HapticFeedback.lightImpact();
 
@@ -393,7 +491,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
     _persistActiveBackup();
   }
 
-  void _resumeAktivitas() {
+  void _lanjutkanSesi() {
     if (!_isTracking || !_isPaused) return;
     HapticFeedback.lightImpact();
 
@@ -406,12 +504,12 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
     _persistActiveBackup();
   }
 
-  Future<void> _konfirmasiSelesai() async {
+  Future<void> _konfirmasiSelesaikan() async {
     HapticFeedback.mediumImpact();
 
     final wasPaused = _isPaused;
     if (!wasPaused) {
-      _pauseAktivitas();
+      _pauseSesi();
     }
 
     final konfirmasi = await showDialog<bool>(
@@ -437,7 +535,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
             const SizedBox(width: 12),
             const Expanded(
               child: Text(
-                'Selesaikan Aktivitas?',
+                'Selesaikan Sesi?',
                 style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
@@ -448,7 +546,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
           ],
         ),
         content: Text(
-          'Pastikan sesi $_jenisAktivitas kamu sudah selesai. Hasil tracking akan disimpan ke riwayat dan statistik progresmu.',
+          'Sesi $_jenisAktivitas akan diakhiri dan hasilnya disimpan ke riwayat aktivitasmu.',
           style: const TextStyle(
             fontSize: 13.5,
             color: Color(0xFF475569),
@@ -460,7 +558,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text(
-              'Lanjutkan Latihan',
+              'Batal',
               style: TextStyle(
                 color: Color(0xFF64748B),
                 fontWeight: FontWeight.w700,
@@ -470,7 +568,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0066CC),
+              backgroundColor: const Color(0xFF0077E6),
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -478,7 +576,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
             ),
             child: const Text(
-              'Ya, Selesai',
+              'Ya, Selesaikan',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
@@ -491,7 +589,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
 
     if (konfirmasi != true) {
       if (!wasPaused && mounted) {
-        _resumeAktivitas();
+        _lanjutkanSesi();
       }
       return;
     }
@@ -500,6 +598,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
   }
 
   Future<void> _selesaikanDanSimpan() async {
+    _prepTimer?.cancel();
     _uiTimer?.cancel();
     _positionSub?.cancel();
     _stepSub?.cancel();
@@ -516,8 +615,8 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
     final durasiFormatted = TrackingCalculator.formatDurasiHms(totalSeconds);
     final ruteCopy = List<LatLng>.from(_rutePoints);
     final jenisCopy = _jenisAktivitas;
-    final langkahCopy = _sensorLangkahTersedia ? _stepCount : 0;
-    final sensorTersediaCopy = _sensorLangkahTersedia;
+    final langkahCopy = _effectiveSteps;
+    final isStepEstimatedCopy = !_sensorLangkahTersedia || _sensorStepCount == 0;
     final kaloriCopy = _caloriesBurned;
     final splitsCopy = List<SplitKilometer>.from(_splitList);
     final speedSeriesCopy = _speedSamples.isNotEmpty
@@ -537,7 +636,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
       waktuMenit: durasiMenit,
       durasiDetik: totalSeconds,
       langkah: langkahCopy,
-      sensorLangkahTersedia: sensorTersediaCopy,
+      sensorLangkahTersedia: true,
       paceRataRata: paceFormatted,
       kecepatanRataRataKmh: double.parse(avgSpeed.toStringAsFixed(1)),
       kecepatanSeries: speedSeriesCopy,
@@ -555,8 +654,11 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
 
     if (!mounted) return;
 
+    // Kembalikan state halaman Tracking ke mode siap (Bottom Nav Bar muncul lagi)
     setState(() {
+      _isPreparing = false;
       _isTracking = false;
+      _syncFocusNavigationState();
       _isPaused = false;
       _activeSegmentStart = null;
       _accumulatedActiveDuration = Duration.zero;
@@ -565,13 +667,16 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
       _currentSpeedKmh = 0.0;
       _averageSpeedKmh = 0.0;
       _caloriesBurned = 0.0;
-      _stepCount = 0;
+      _sensorStepCount = 0;
       _rutePoints.clear();
     });
 
+    // Jalankan kembali stream lokasi pasif agar marker posisi pengguna tetap aktif
+    _initInitialGps();
+
     Navigator.of(context).push(
       PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 360),
+        transitionDuration: const Duration(milliseconds: 340),
         pageBuilder: (_, _, _) => RingkasanSesiScreen(
           jenisOlahraga: jenisCopy,
           tanggal: 'Hari ini',
@@ -579,14 +684,12 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
           durasiFormatted: durasiFormatted,
           jarakKm: jarakKm.toStringAsFixed(2).replaceAll('.', ','),
           jarakMeter: _totalDistanceMeters,
-          langkah: sensorTersediaCopy
-              ? langkahCopy.toString().replaceAllMapped(
-                    RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-                    (m) => '${m[1]}.',
-                  )
-              : 'Tidak tersedia',
-          sensorLangkahTersedia: sensorTersediaCopy,
-          isStepEstimated: false,
+          langkah: langkahCopy.toString().replaceAllMapped(
+                RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                (m) => '${m[1]}.',
+              ),
+          sensorLangkahTersedia: true,
+          isStepEstimated: isStepEstimatedCopy,
           kalori: kaloriCopy.round().toString(),
           paceRataRata: paceFormatted,
           kecepatanRataRataKmh: avgSpeed,
@@ -710,7 +813,7 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
         'jenis': _jenisAktivitas,
         'elapsedSeconds': _elapsedSeconds,
         'distanceMeters': _totalDistanceMeters,
-        'stepCount': _stepCount,
+        'stepCount': _sensorStepCount,
         'calories': _caloriesBurned,
         'rutePoints': _rutePoints
             .map((p) => {'lat': p.latitude, 'lon': p.longitude})
@@ -752,12 +855,13 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
       setState(() {
         _jenisAktivitas = (data['jenis'] ?? 'Berlari').toString();
         _isTracking = true;
+        _syncFocusNavigationState();
         _isPaused = true;
         _accumulatedActiveDuration = Duration(seconds: savedSeconds);
         _elapsedSeconds = savedSeconds;
         _totalDistanceMeters =
             (data['distanceMeters'] as num?)?.toDouble() ?? 0.0;
-        _stepCount = (data['stepCount'] as num?)?.toInt() ?? 0;
+        _sensorStepCount = (data['stepCount'] as num?)?.toInt() ?? 0;
         _caloriesBurned = (data['calories'] as num?)?.toDouble() ?? 0.0;
         _rutePoints
           ..clear()
@@ -830,20 +934,17 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
   }
 
   // ═════════════════════════════════════════════════════════════════════
-  // 5. BUILD UI MODERN FITNESS TRACKING
+  // 5. BUILD UI FULL-SCREEN STRAVA-INSPIRED TRACKING
   // ═════════════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
-    final jarakAdaptif =
-        TrackingCalculator.formatJarakAdaptif(_totalDistanceMeters);
-    final jarakKm = _totalDistanceMeters / 1000.0;
-    final avgPaceMin =
-        jarakKm > 0.01 ? (_elapsedSeconds / 60.0) / jarakKm : 0.0;
-    final paceFormatted = TrackingCalculator.formatPace(avgPaceMin);
-    final speedToShow = _isTracking && !_isPaused && _currentSpeedKmh > 0.3
-        ? _currentSpeedKmh
-        : _averageSpeedKmh;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final bottomControlsPadding = _isTracking
+        ? (screenHeight < 700 ? 255.0 : 275.0)
+        : (_isPreparing
+            ? (screenHeight < 700 ? 245.0 : 265.0)
+            : (screenHeight < 700 ? 225.0 : 240.0));
 
     final gpsColor = !_gpsServiceEnabled ||
             _locationPermission == LocationPermission.denied ||
@@ -853,469 +954,161 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
             ? const Color(0xFFF59E0B)
             : const Color(0xFF059669));
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7FAFF),
-      body: SafeArea(
-        child: Column(
+    return PopScope(
+      canPop: !_isInFocusMode,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _isInFocusMode) {
+          _handleBackDuringSession();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFEFF6FF),
+        // Hilangkan seluruh area BottomNavigationBar secara otomatis saat persiapan & sesi aktif
+        bottomNavigationBar: (!_isInFocusMode && widget.showBottomNav)
+            ? const AppBottomNavBar(currentIndex: 2)
+            : null,
+        body: Stack(
           children: [
-            // ── A. HEADER RINGKAS & MODERN ──────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
-              child: Row(
-                children: [
-                  Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () {
-                        final nav = MainNavigationController.of(context);
-                        if (nav != null) {
-                          nav.switchTab(0);
-                        } else if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        } else {
-                          Navigator.of(context)
-                              .pushReplacementNamed('/dashboard');
-                        }
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color: Color(0xFF0077E6),
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Text(
-                              'Tracking Aktivitas',
-                              style: TextStyle(
-                                fontSize: 18.5,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF0F172A),
-                                letterSpacing: -0.2,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFDBEAFE),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                _isBerlari
-                                    ? Icons.directions_run_rounded
-                                    : Icons.directions_walk_rounded,
-                                color: const Color(0xFF0077E6),
-                                size: 15,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          _isTracking
-                              ? (_isPaused
-                                  ? 'Sesi dijeda — tekan Lanjutkan saat siap'
-                                  : 'Tetap fokus, setiap langkahmu tercatat!')
-                              : 'Siap bergerak hari ini? Pilih aktivitasmu',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const RiwayatOlahragaScreen(),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 11, vertical: 9),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.history_rounded,
-                                color: Color(0xFF0077E6), size: 17),
-                            SizedBox(width: 4),
-                            Text(
-                              'Riwayat',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
+            // ── 1. FULL-SCREEN OPENSTREETMAP ────────────────────────
+            Positioned.fill(
+              child: OsmTrackingMap(
+                rutePoints: _rutePoints,
+                posisiSaatIni: _posisiSaatIni,
+                posisiAwal: _posisiAwal,
+                followUser: _followUser,
+                isTrackingActive: _isTracking && !_isPaused,
+                isGpsLoading: _isGpsLoading,
+                showTopStatusBadge: false,
+                showZoomControls: true,
+                controlsBottomPadding: bottomControlsPadding,
+                gpsStatusText: _gpsStatusText,
+                gpsStatusColor: gpsColor,
+                onToggleFollow: () {
+                  setState(() => _followUser = true);
+                },
+              ),
+            ),
+
+            // ── 2. TOP OVERLAY: KIRI (BACK / STATUS) & KANAN (LOGO GERAK) ──
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      if (_isPreparing)
+                        _buildPreparationStatusPill()
+                      else if (_isTracking)
+                        _buildActiveStatusPill()
+                      else
+                        _FrostedOverlayPill(
+                          onTap: () {
+                            final nav = MainNavigationController.of(context);
+                            if (nav != null) {
+                              nav.switchTab(0);
+                            } else if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            } else {
+                              Navigator.of(context)
+                                  .pushReplacementNamed('/dashboard');
+                            }
+                          },
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 9),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                size: 16,
                                 color: Color(0xFF0077E6),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── KONTEN SCROLLABLE ───────────────────────────────────
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(18, 2, 18, 16),
-                children: [
-                  if (_isTracking) ...[
-                    _buildLiveStatusBanner(),
-                    const SizedBox(height: 12),
-                  ],
-
-                  // ── B. PILIHAN JENIS AKTIVITAS ───────────────────────
-                  GerakEntrance(
-                    delayMs: 30,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _ActivityTypeCard(
-                            title: 'Berjalan Kaki',
-                            subtitle: 'Santai & ritme stabil',
-                            icon: Icons.directions_walk_rounded,
-                            selected: _jenisAktivitas == 'Berjalan',
-                            disabled: _isTracking,
-                            onTap: () {
-                              HapticFeedback.selectionClick();
-                              setState(() => _jenisAktivitas = 'Berjalan');
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _ActivityTypeCard(
-                            title: 'Berlari',
-                            subtitle: 'Kardio & pembakaran optimal',
-                            icon: Icons.directions_run_rounded,
-                            selected: _jenisAktivitas == 'Berlari',
-                            disabled: _isTracking,
-                            onTap: () {
-                              HapticFeedback.selectionClick();
-                              setState(() => _jenisAktivitas = 'Berlari');
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  // ── C. AREA PETA OPENSTREETMAP UTAMA ─────────────────
-                  GerakEntrance(
-                    delayMs: 70,
-                    child: Container(
-                      height: _isTracking ? 245 : 230,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                const Color(0xFF0F172A).withValues(alpha: 0.06),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: OsmTrackingMap(
-                        rutePoints: _rutePoints,
-                        posisiSaatIni: _posisiSaatIni,
-                        posisiAwal: _posisiAwal,
-                        followUser: _followUser,
-                        isTrackingActive: _isTracking && !_isPaused,
-                        isGpsLoading: _isGpsLoading,
-                        gpsStatusText: _gpsStatusText,
-                        gpsStatusColor: gpsColor,
-                        onToggleFollow: () {
-                          setState(() => _followUser = true);
-                        },
-                        onGpsActionTap: (!_gpsServiceEnabled ||
-                                _locationPermission ==
-                                    LocationPermission.denied ||
-                                _locationPermission ==
-                                    LocationPermission.deniedForever)
-                            ? () async {
-                                if (!_gpsServiceEnabled) {
-                                  await Geolocator.openLocationSettings();
-                                } else {
-                                  await _initInitialGps();
-                                }
-                              }
-                            : null,
-                        gpsActionLabel:
-                            !_gpsServiceEnabled ? 'Aktifkan' : 'Izinkan',
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  // ── D. INFORMASI AKTIVITAS (DURASI & GRID METRIK) ────
-                  GerakEntrance(
-                    delayMs: 110,
-                    child: Column(
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 18, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF0077E6)
-                                    .withValues(alpha: 0.06),
-                                blurRadius: 14,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFEFF6FF),
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: const Icon(
-                                  Icons.timer_rounded,
-                                  color: Color(0xFF0077E6),
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'DURASI AKTIVITAS',
-                                      style: TextStyle(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFF64748B),
-                                        letterSpacing: 0.8,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      TrackingCalculator.formatDurasiHms(
-                                          _elapsedSeconds),
-                                      style: const TextStyle(
-                                        fontSize: 30,
-                                        fontWeight: FontWeight.w900,
-                                        color: Color(0xFF0F172A),
-                                        fontFeatures: [
-                                          FontFeature.tabularFigures()
-                                        ],
-                                        height: 1.1,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: _isTracking
-                                      ? (_isPaused
-                                          ? const Color(0xFFFEF3C7)
-                                          : const Color(0xFFDBEAFE))
-                                      : const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  _isTracking
-                                      ? (_isPaused ? 'Jeda' : 'Aktif')
-                                      : 'Siap',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: _isTracking
-                                        ? (_isPaused
-                                            ? const Color(0xFFD97706)
-                                            : const Color(0xFF0077E6))
-                                        : const Color(0xFF64748B),
-                                  ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Beranda',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF0F172A),
                                 ),
                               ),
                             ],
                           ),
                         ),
 
-                        const SizedBox(height: 10),
-
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _MetricGridCard(
-                                label: 'Jarak Tempuh',
-                                value: jarakAdaptif.nilai,
-                                unit: jarakAdaptif.satuan,
-                                subInfo: jarakKm >= 1.0
-                                    ? '${_totalDistanceMeters.round()} meter'
-                                    : 'Satuan meter',
-                                icon: Icons.route_rounded,
-                                accentColor: const Color(0xFF0077E6),
-                                iconBg: const Color(0xFFDBEAFE),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _MetricGridCard(
-                                label: _isBerlari ? 'Pace Lari' : 'Kecepatan',
-                                value: _isBerlari
-                                    ? paceFormatted.replaceAll(' /km', '')
-                                    : speedToShow.toStringAsFixed(1),
-                                unit: _isBerlari ? '/km' : 'km/jam',
-                                subInfo: _isBerlari
-                                    ? '${speedToShow.toStringAsFixed(1)} km/jam'
-                                    : 'Pace ${paceFormatted.replaceAll(' /km', '')}/km',
-                                icon: Icons.speed_rounded,
-                                accentColor: const Color(0xFF0284C7),
-                                iconBg: const Color(0xFFE0F2FE),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _MetricGridCard(
-                                label: 'Jumlah Langkah',
-                                value: _sensorLangkahTersedia
-                                    ? _stepCount.toString()
-                                    : 'N/A',
-                                unit: _sensorLangkahTersedia ? 'langkah' : '',
-                                subInfo: _sensorLangkahTersedia
-                                    ? 'Sensor perangkat aktif'
-                                    : 'Sensor belum tersedia',
-                                icon: Icons.do_not_step_rounded,
-                                accentColor: const Color(0xFF0EA5E9),
-                                iconBg: const Color(0xFFE0F2FE),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _MetricGridCard(
-                                label: 'Kalori Terbakar',
-                                value: _caloriesBurned.round().toString(),
-                                unit: 'kcal',
-                                subInfo:
-                                    'Estimasi (${_userWeightKg.round()} kg)',
-                                icon: Icons.local_fire_department_rounded,
-                                accentColor: const Color(0xFFF59E0B),
-                                iconBg: const Color(0xFFFEF3C7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                      // Sisi Kanan: Logo & Identitas GERAK Minimalis
+                      const _GerakTopRightLogoBadge(),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
 
-            // ── E. TOMBOL AKSI UTAMA (MULAI / PAUSE / RESUME / SELESAI) ──
-            Container(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
-              color: const Color(0xFFF7FAFF),
-              child: _buildActionControls(),
+            // ── 3. BOTTOM FLOATING PANEL (PRA-SESI / PERSIAPAN / TRACKING AKTIF) ──
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                bottom: _isInFocusMode || !widget.showBottomNav,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 280),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.08),
+                        end: Offset.zero,
+                      ).animate(anim),
+                      child: child,
+                    ),
+                  ),
+                  child: _isPreparing
+                      ? _buildPreparationPanel()
+                      : (_isTracking
+                          ? _buildActiveTrackingPanel()
+                          : _buildPreSessionPanel(gpsColor)),
+                ),
+              ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar:
-          widget.showBottomNav ? const AppBottomNavBar(currentIndex: 2) : null,
     );
   }
 
-  Widget _buildLiveStatusBanner() {
-    final isPaused = _isPaused;
-    final bgColor =
-        isPaused ? const Color(0xFFFFFBEB) : const Color(0xFFEFF6FF);
-    final borderColor =
-        isPaused ? const Color(0xFFFDE68A) : const Color(0xFFBFDBFE);
-    final dotColor =
-        isPaused ? const Color(0xFFD97706) : const Color(0xFF0077E6);
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 240),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: 1.1),
-      ),
+  // ── Pill Status Persiapan di Kiri Atas ──────────────────────────────
+  Widget _buildPreparationStatusPill() {
+    return _FrostedOverlayPill(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      borderColor: const Color(0xFFBAE6FD),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          AnimatedBuilder(
-            animation: _livePulseController,
-            builder: (_, _) => Opacity(
-              opacity: isPaused ? 1.0 : (0.45 + _livePulseController.value * 0.55),
-              child: Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: dotColor,
-                  shape: BoxShape.circle,
-                ),
-              ),
+          Container(
+            width: 9,
+            height: 9,
+            decoration: const BoxDecoration(
+              color: Color(0xFF0077E6),
+              shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              isPaused
-                  ? 'Aktivitas Dijeda • Perekaman sementara dihentikan'
-                  : 'Tracking Berlangsung • Merecord rute $_jenisAktivitas',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: dotColor,
-              ),
+          const SizedBox(width: 8),
+          Text(
+            'PERSIAPAN • $_prepSecondsRemaining DETIK',
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.5,
+              color: Color(0xFF0077E6),
             ),
           ),
         ],
@@ -1323,77 +1116,912 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
     );
   }
 
-  Widget _buildActionControls() {
-    if (!_isTracking) {
-      return _StartTrackingButton(
-        jenisAktivitas: _jenisAktivitas,
-        onPressed: _mulaiAktivitas,
-      );
-    }
+  // ── Pill Status Tracking di Kiri Atas (Saat Sesi Aktif) ──────────────
+  Widget _buildActiveStatusPill() {
+    final isPaused = _isPaused;
+    final dotColor =
+        isPaused ? const Color(0xFFD97706) : const Color(0xFF0077E6);
 
-    return Row(
-      children: [
-        Expanded(
-          child: SizedBox(
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: _isPaused ? _resumeAktivitas : _pauseAktivitas,
-              icon: Icon(
-                _isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                color: Colors.white,
-                size: 23,
-              ),
-              label: Text(
-                _isPaused ? 'Resume' : 'Pause',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isPaused
-                    ? const Color(0xFF0077E6)
-                    : const Color(0xFFF59E0B),
-                elevation: 2,
-                shadowColor: (_isPaused
-                        ? const Color(0xFF0077E6)
-                        : const Color(0xFFF59E0B))
-                    .withValues(alpha: 0.35),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+    return _FrostedOverlayPill(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      borderColor: isPaused
+          ? const Color(0xFFFDE68A)
+          : const Color(0xFFBAE6FD),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedBuilder(
+            animation: _livePulseController,
+            builder: (_, _) => Opacity(
+              opacity:
+                  isPaused ? 1.0 : (0.4 + _livePulseController.value * 0.6),
+              child: Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: dotColor,
+                  shape: BoxShape.circle,
                 ),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: SizedBox(
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: _konfirmasiSelesai,
-              icon: const Icon(
-                Icons.stop_circle_outlined,
-                color: Colors.white,
-                size: 21,
-              ),
-              label: const Text(
-                'Selesai',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
+          const SizedBox(width: 8),
+          Text(
+            isPaused ? 'DIJEDA' : 'TRACKING AKTIF',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.6,
+              color: dotColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── PANEL BAWAH: JEDA PERSIAPAN 30 DETIK (SEDERHANA & BERSIH) ────────
+  Widget _buildPreparationPanel() {
+    final progress = _prepSecondsRemaining / _durasiPersiapanDetik;
+
+    return Container(
+      key: const ValueKey('preparation_panel'),
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0xFFDBEAFE), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Bersiap Memulai $_jenisAktivitas',
+            style: const TextStyle(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Lakukan peregangan singkat sebelum sesi dimulai otomatis',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Lingkaran Hitung Mundur 30 Detik Sederhana
+          SizedBox(
+            width: 88,
+            height: 88,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 88,
+                  height: 88,
+                  child: CircularProgressIndicator(
+                    value: progress.clamp(0.0, 1.0),
+                    strokeWidth: 6,
+                    backgroundColor: const Color(0xFFE0F2FE),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFF0077E6),
+                    ),
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$_prepSecondsRemaining',
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0077E6),
+                        fontFeatures: [FontFeature.tabularFigures()],
+                        height: 1.05,
+                      ),
+                    ),
+                    const Text(
+                      'detik',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Tombol Batalkan & Mulai Sekarang
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 46,
+                  child: OutlinedButton(
+                    onPressed: _batalkanPersiapan,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Batalkan',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F2B5C),
-                elevation: 2,
-                shadowColor: const Color(0xFF0F2B5C).withValues(alpha: 0.3),
-                shape: RoundedRectangleBorder(
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: 46,
+                  child: ElevatedButton(
+                    onPressed: _mulaiSesiAktif,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0077E6),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Mulai Sekarang',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── PANEL BAWAH 1: SEBELUM MEMULAI SESI (MODERN & MINIMALIS) ─────────
+  Widget _buildPreSessionPanel(Color gpsColor) {
+    final hasGpsIssue = !_gpsServiceEnabled ||
+        _locationPermission == LocationPermission.denied ||
+        _locationPermission == LocationPermission.deniedForever;
+
+    final estimasiKalori30Mnt = TrackingCalculator.hitungKaloriMet(
+      met: _isBerlari ? 8.3 : 3.6,
+      beratBadanKg: _userWeightKg,
+      durasiMenit: 30,
+    ).round();
+
+    return Container(
+      key: const ValueKey('pre_session_panel'),
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.1),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Baris 1: Status GPS + Pintasan Riwayat
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: gpsColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isGpsLoading)
+                      SizedBox(
+                        width: 11,
+                        height: 11,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: gpsColor,
+                        ),
+                      )
+                    else
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: gpsColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _gpsStatusText,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: gpsColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              if (hasGpsIssue)
+                GestureDetector(
+                  onTap: () async {
+                    if (!_gpsServiceEnabled) {
+                      await Geolocator.openLocationSettings();
+                    } else {
+                      await _initInitialGps();
+                    }
+                  },
+                  child: const Text(
+                    'Aktifkan GPS',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0077E6),
+                    ),
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const RiwayatOlahragaScreen(),
+                      ),
+                    );
+                  },
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.history_rounded,
+                          size: 15, color: Color(0xFF0077E6)),
+                      SizedBox(width: 4),
+                      Text(
+                        'Riwayat',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0077E6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Baris 2: Pilihan Jenis Aktivitas Ringkas
+          Row(
+            children: [
+              Expanded(
+                child: _CompactSportSelector(
+                  label: 'Berlari',
+                  icon: Icons.directions_run_rounded,
+                  selected: _jenisAktivitas == 'Berlari',
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _jenisAktivitas = 'Berlari');
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _CompactSportSelector(
+                  label: 'Berjalan Kaki',
+                  icon: Icons.directions_walk_rounded,
+                  selected: _jenisAktivitas == 'Berjalan',
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _jenisAktivitas = 'Berjalan');
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          // Baris 3: Ringkasan Singkat Aktivitas yang Akan Dilakukan
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFF1F5F9)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.route_rounded,
+                        size: 15, color: Color(0xFF0077E6)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Jeda siap 30d • $_jenisAktivitas',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  '~$estimasiKalori30Mnt kcal/30m',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0077E6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Baris 4: Tombol Utama Mulai Sesi
+          _PrimarySportButton(
+            label: 'Mulai Sesi',
+            icon: Icons.play_arrow_rounded,
+            onPressed: _mulaiPersiapan,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── PANEL BAWAH 2: KETIKA TRACKING BERLANGSUNG (STRAVA-INSPIRED) ─────
+  Widget _buildActiveTrackingPanel() {
+    final jarakKm = _totalDistanceMeters / 1000.0;
+    final avgPaceMin =
+        jarakKm > 0.01 ? (_elapsedSeconds / 60.0) / jarakKm : 0.0;
+    final paceShort = TrackingCalculator.formatPaceShort(avgPaceMin);
+
+    return ClipRRect(
+      key: const ValueKey('active_tracking_panel'),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.93),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(28)),
+            border: const Border(
+              top: BorderSide(color: Color(0xFFDBEAFE), width: 1.3),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0F172A).withValues(alpha: 0.14),
+                blurRadius: 24,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle indikator & status aktivitas
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        _isBerlari
+                            ? Icons.directions_run_rounded
+                            : Icons.directions_walk_rounded,
+                        color: const Color(0xFF0077E6),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Sesi $_jenisAktivitas',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    _isPaused
+                        ? 'Aktivitas dijeda sementara'
+                        : 'Merekam rute real-time',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: _isPaused
+                          ? const Color(0xFFD97706)
+                          : const Color(0xFF0077E6),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              // 2 Metrik Utama Besar (Durasi & Jarak km) ala Strava
+              Row(
+                children: [
+                  Expanded(
+                    child: _HeroTelemetryBlock(
+                      label: 'DURASI',
+                      value:
+                          TrackingCalculator.formatDurasiHms(_elapsedSeconds),
+                      unit: '',
+                    ),
+                  ),
+                  Container(
+                    width: 1.2,
+                    height: 44,
+                    color: const Color(0xFFE2E8F0),
+                  ),
+                  Expanded(
+                    child: _HeroTelemetryBlock(
+                      label: 'JARAK',
+                      value: jarakKm.toStringAsFixed(2).replaceAll('.', ','),
+                      unit: 'km',
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              // 3 Metrik Pendukung (Estimasi Langkah, Estimasi Kalori, Pace)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F7FF),
                   borderRadius: BorderRadius.circular(16),
                 ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _SubTelemetryItem(
+                        icon: Icons.directions_walk_rounded,
+                        iconColor: const Color(0xFF0077E6),
+                        label: 'Est. Langkah',
+                        value: '$_effectiveSteps',
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 28,
+                      color: const Color(0xFFDBEAFE),
+                    ),
+                    Expanded(
+                      child: _SubTelemetryItem(
+                        icon: Icons.local_fire_department_rounded,
+                        iconColor: const Color(0xFFF59E0B),
+                        label: 'Est. Kalori',
+                        value: '${_caloriesBurned.round()} kcal',
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 28,
+                      color: const Color(0xFFDBEAFE),
+                    ),
+                    Expanded(
+                      child: _SubTelemetryItem(
+                        icon: Icons.speed_rounded,
+                        iconColor: const Color(0xFF0284C7),
+                        label: 'Pace',
+                        value: '$paceShort/km',
+                      ),
+                    ),
+                  ],
+                ),
               ),
+
+              const SizedBox(height: 14),
+
+              // Tombol Kontrol: Pause / Lanjutkan & Selesaikan
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _isPaused ? _lanjutkanSesi : _pauseSesi,
+                        icon: Icon(
+                          _isPaused
+                              ? Icons.play_arrow_rounded
+                              : Icons.pause_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                        label: Text(
+                          _isPaused ? 'Lanjutkan' : 'Pause',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isPaused
+                              ? const Color(0xFF0077E6)
+                              : const Color(0xFFF59E0B),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _konfirmasiSelesaikan,
+                        icon: const Icon(
+                          Icons.stop_circle_outlined,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        label: const Text(
+                          'Selesaikan',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F2B5C),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LOGO & IDENTITAS GERAK DI POJOK KANAN ATAS
+// ═══════════════════════════════════════════════════════════════════════
+
+class _GerakTopRightLogoBadge extends StatelessWidget {
+  const _GerakTopRightLogoBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return _FrostedOverlayPill(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Image.asset(
+              'assets/images/logo_gerak.png',
+              width: 22,
+              height: 22,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => Image.asset(
+                'assets/images/gerak_logo.png',
+                width: 22,
+                height: 22,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => Image.asset(
+                  'assets/images/logo.png',
+                  width: 22,
+                  height: 22,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0077E6), Color(0xFF38BDF8)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.bolt_rounded,
+                      color: Colors.white,
+                      size: 15,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 7),
+          const Text(
+            'GERAK',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0077E6),
+              letterSpacing: 1.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FrostedOverlayPill extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final Color borderColor;
+  final VoidCallback? onTap;
+
+  const _FrostedOverlayPill({
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    this.borderColor = const Color(0xFFE2E8F0),
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.90),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: borderColor, width: 1.1),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0F172A).withValues(alpha: 0.10),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+
+    if (onTap != null) {
+      return GestureDetector(onTap: onTap, child: content);
+    }
+    return content;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUB-WIDGET KOMPONEN TRACKING
+// ═══════════════════════════════════════════════════════════════════════
+
+class _CompactSportSelector extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CompactSportSelector({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF0077E6) : const Color(0xFFF1F7FF),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+            color:
+                selected ? const Color(0xFF0077E6) : const Color(0xFFDBEAFE),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 19,
+              color: selected ? Colors.white : const Color(0xFF0077E6),
+            ),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: selected ? Colors.white : const Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroTelemetryBlock extends StatelessWidget {
+  final String label;
+  final String value;
+  final String unit;
+
+  const _HeroTelemetryBlock({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF64748B),
+            letterSpacing: 0.9,
+          ),
+        ),
+        const SizedBox(height: 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F172A),
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+              if (unit.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Text(
+                  unit,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0077E6),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SubTelemetryItem extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final String value;
+
+  const _SubTelemetryItem({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: iconColor),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0F172A),
             ),
           ),
         ),
@@ -1402,221 +2030,22 @@ class _SesiOlahragaScreenState extends State<SesiOlahragaScreen>
   }
 }
 
-class _ActivityTypeCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final bool selected;
-  final bool disabled;
-  final VoidCallback onTap;
-
-  const _ActivityTypeCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.selected,
-    required this.disabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: disabled ? null : onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 240),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF0077E6) : Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: selected
-                  ? const Color(0xFF0077E6).withValues(alpha: 0.28)
-                  : const Color(0xFF0F172A).withValues(alpha: 0.04),
-              blurRadius: selected ? 14 : 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 240),
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: selected
-                    ? Colors.white.withValues(alpha: 0.2)
-                    : const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: selected ? Colors.white : const Color(0xFF0077E6),
-                size: 21,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
-                      color: selected ? Colors.white : const Color(0xFF0F172A),
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w500,
-                      color: selected
-                          ? Colors.white.withValues(alpha: 0.85)
-                          : const Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MetricGridCard extends StatelessWidget {
+class _PrimarySportButton extends StatefulWidget {
   final String label;
-  final String value;
-  final String unit;
-  final String subInfo;
   final IconData icon;
-  final Color accentColor;
-  final Color iconBg;
-
-  const _MetricGridCard({
-    required this.label,
-    required this.value,
-    required this.unit,
-    required this.subInfo,
-    required this.icon,
-    required this.accentColor,
-    required this.iconBg,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Icon(icon, color: accentColor, size: 15),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: RichText(
-              text: TextSpan(
-                children: [
-                  TextSpan(
-                    text: value,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  if (unit.isNotEmpty)
-                    TextSpan(
-                      text: ' $unit',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: accentColor,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            subInfo,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 10.5,
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StartTrackingButton extends StatefulWidget {
-  final String jenisAktivitas;
   final VoidCallback onPressed;
 
-  const _StartTrackingButton({
-    required this.jenisAktivitas,
+  const _PrimarySportButton({
+    required this.label,
+    required this.icon,
     required this.onPressed,
   });
 
   @override
-  State<_StartTrackingButton> createState() => _StartTrackingButtonState();
+  State<_PrimarySportButton> createState() => _PrimarySportButtonState();
 }
 
-class _StartTrackingButtonState extends State<_StartTrackingButton> {
+class _PrimarySportButtonState extends State<_PrimarySportButton> {
   bool _pressed = false;
 
   @override
@@ -1656,23 +2085,23 @@ class _StartTrackingButtonState extends State<_StartTrackingButton> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: Colors.white.withValues(alpha: 0.22),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.play_arrow_rounded,
+                child: Icon(
+                  widget.icon,
                   color: Colors.white,
                   size: 22,
                 ),
               ),
               const SizedBox(width: 10),
               Text(
-                'Mulai Aktivitas ${widget.jenisAktivitas}',
+                widget.label,
                 style: const TextStyle(
-                  fontSize: 15.5,
+                  fontSize: 16,
                   fontWeight: FontWeight.w800,
                   color: Colors.white,
-                  letterSpacing: 0.2,
+                  letterSpacing: 0.3,
                 ),
               ),
             ],

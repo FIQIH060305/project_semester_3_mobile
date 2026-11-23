@@ -60,7 +60,6 @@ class _RingkasanSesiScreenState extends State<RingkasanSesiScreen> {
   @override
   void initState() {
     super.initState();
-    // Jika dipanggil dari PelacakanAktifScreen lama yang belum menyimpan, simpan otomatis
     if (widget.syncMessage != null) {
       _alreadySaved = true;
     } else {
@@ -265,7 +264,7 @@ class _RingkasanSesiScreenState extends State<RingkasanSesiScreen> {
               GerakEntrance(
                 delayMs: 90,
                 child: Container(
-                  height: 195,
+                  height: 210,
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -285,6 +284,7 @@ class _RingkasanSesiScreenState extends State<RingkasanSesiScreen> {
                           posisiSaatIni: widget.rutePoints.last,
                           followUser: false,
                           isReadOnly: true,
+                          borderRadius: 22,
                           gpsStatusText:
                               'Rute Perjalanan (${widget.rutePoints.length} titik GPS)',
                           gpsStatusColor: const Color(0xFF0077E6),
@@ -366,9 +366,9 @@ class _RingkasanSesiScreenState extends State<RingkasanSesiScreen> {
                           child: _SummaryMetricTile(
                             label: 'Jumlah Langkah',
                             value: widget.langkah,
-                            subInfo: widget.sensorLangkahTersedia
-                                ? 'Tercatat dari sensor'
-                                : 'Sensor tidak tersedia',
+                            subInfo: widget.isStepEstimated
+                                ? 'Estimasi berdasarkan jarak'
+                                : 'Tercatat dari sensor',
                             icon: Icons.directions_walk_rounded,
                             accentColor: const Color(0xFF0EA5E9),
                             iconBg: const Color(0xFFE0F2FE),
@@ -509,30 +509,39 @@ class _RingkasanSesiScreenState extends State<RingkasanSesiScreen> {
 
               const SizedBox(height: 22),
 
-              // ── 5. TOMBOL AKSI: SELESAI & LIHAT RIWAYAT AKTIVITAS ───
+              // ── 5. TOMBOL KEMBALI KE HALAMAN TRACKING & RIWAYAT ───────
               SizedBox(
                 width: double.infinity,
                 height: 52,
-                child: ElevatedButton(
+                child: ElevatedButton.icon(
                   onPressed: () {
-                    Navigator.of(context)
-                        .pushNamedAndRemoveUntil('/dashboard', (route) => false);
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    } else {
+                      Navigator.of(context)
+                          .pushNamedAndRemoveUntil('/dashboard', (r) => false);
+                    }
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0066CC),
-                    elevation: 2,
-                    shadowColor:
-                        const Color(0xFF0066CC).withValues(alpha: 0.35),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+                  icon: const Icon(
+                    Icons.map_rounded,
+                    color: Colors.white,
+                    size: 20,
                   ),
-                  child: const Text(
-                    'Selesai',
+                  label: const Text(
+                    'Kembali ke Halaman Tracking',
                     style: TextStyle(
-                      fontSize: 15.5,
+                      fontSize: 15,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0077E6),
+                    elevation: 2,
+                    shadowColor:
+                        const Color(0xFF0077E6).withValues(alpha: 0.35),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
                   ),
                 ),

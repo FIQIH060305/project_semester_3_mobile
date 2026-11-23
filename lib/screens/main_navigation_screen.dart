@@ -32,7 +32,8 @@ class MainNavigationController extends InheritedWidget {
 /// Halaman induk navigasi aplikasi GERAK
 ///
 /// Menggunakan [IndexedStack] agar seluruh 5 halaman utama mempertahankan
-/// state, posisi scroll, dan kondisi data saat berpindah tab.
+/// state, posisi scroll, dan kondisi data saat berpindah tab, serta
+/// menyembunyikan [AppBottomNavBar] secara otomatis ketika sesi tracking aktif.
 class MainNavigationScreen extends StatefulWidget {
   final int initialIndex;
 
@@ -55,6 +56,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   void _onTabTapped(int index) {
+    // Mencegah perpindahan halaman tidak disengaja saat sesi tracking aktif
+    if (TrackingSessionController.isSessionActive.value) return;
     if (_currentIndex == index) return;
     setState(() {
       _currentIndex = index;
@@ -66,9 +69,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: const [
-            Icon(Icons.exit_to_app_rounded, color: AppBottomNavBar.primaryBlue, size: 24),
+        title: const Row(
+          children: [
+            Icon(Icons.exit_to_app_rounded,
+                color: AppBottomNavBar.primaryBlue, size: 24),
             SizedBox(width: 10),
             Text(
               'Keluar Aplikasi',
@@ -124,44 +128,58 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return MainNavigationController(
-      currentIndex: _currentIndex,
-      switchTab: _onTabTapped,
-      child: PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) async {
-          if (didPop) return;
+    return ValueListenableBuilder<bool>(
+      valueListenable: TrackingSessionController.isSessionActive,
+      builder: (context, isSessionActive, _) {
+        return MainNavigationController(
+          currentIndex: _currentIndex,
+          switchTab: _onTabTapped,
+          child: PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, result) async {
+              if (didPop) return;
 
-          // 1. Jika pengguna berada di selain Home, tekan Back kembali ke Home
-          if (_currentIndex != 0) {
-            setState(() => _currentIndex = 0);
-            return;
-          }
+              // 1. Jika sesi tracking sedang aktif, tampilkan konfirmasi selesai
+              if (isSessionActive && _currentIndex == 2) {
+                TrackingSessionController.onBackPressedDuringSession?.call();
+                return;
+              }
 
-          // 2. Jika sudah di Home, tampilkan dialog konfirmasi keluar aplikasi
-          final keluar = await _showExitDialog(context);
-          if (keluar && context.mounted) {
-            SystemNavigator.pop();
-          }
-        },
-        child: Scaffold(
-          backgroundColor: Colors.white,
-          body: IndexedStack(
-            index: _currentIndex,
-            children: const [
-              DashboardScreen(showBottomNav: false),
-              JadwalScreen(showBottomNav: false),
-              SesiOlahragaScreen(showBottomNav: false),
-              RiwayatOlahragaScreen(showBottomNav: false),
-              ProfilScreen(showBottomNav: false),
-            ],
+              // 2. Jika pengguna berada di selain Home, tekan Back kembali ke Home
+              if (_currentIndex != 0) {
+                setState(() => _currentIndex = 0);
+                return;
+              }
+
+              // 3. Jika sudah di Home, tampilkan dialog konfirmasi keluar aplikasi
+              final keluar = await _showExitDialog(context);
+              if (keluar && context.mounted) {
+                SystemNavigator.pop();
+              }
+            },
+            child: Scaffold(
+              backgroundColor: Colors.white,
+              body: IndexedStack(
+                index: _currentIndex,
+                children: const [
+                  DashboardScreen(showBottomNav: false),
+                  JadwalScreen(showBottomNav: false),
+                  SesiOlahragaScreen(showBottomNav: false),
+                  RiwayatOlahragaScreen(showBottomNav: false),
+                  ProfilScreen(showBottomNav: false),
+                ],
+              ),
+              // Hilangkan seluruh area BottomNavigationBar saat sesi tracking aktif
+              bottomNavigationBar: isSessionActive
+                  ? null
+                  : AppBottomNavBar(
+                      currentIndex: _currentIndex,
+                      onTap: _onTabTapped,
+                    ),
+            ),
           ),
-          bottomNavigationBar: AppBottomNavBar(
-            currentIndex: _currentIndex,
-            onTap: _onTabTapped,
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

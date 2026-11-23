@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../models/riwayat_item.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/gerak_animations.dart';
-import '../main_navigation_screen.dart';
 import 'detail_riwayat_screen.dart';
 
 class RiwayatOlahragaScreen extends StatefulWidget {
@@ -75,38 +74,6 @@ class _RiwayatOlahragaScreenState extends State<RiwayatOlahragaScreen> {
               padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
               child: Row(
                 children: [
-                  Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () {
-                        final nav = MainNavigationController.of(context);
-                        if (nav != null) {
-                          nav.switchTab(0);
-                        } else if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        } else {
-                          Navigator.of(context)
-                              .pushReplacementNamed('/dashboard');
-                        }
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color: Color(0xFF0077E6),
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

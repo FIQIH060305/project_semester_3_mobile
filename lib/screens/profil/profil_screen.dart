@@ -4,7 +4,6 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/gerak_animations.dart';
-import '../main_navigation_screen.dart';
 import 'edit_profil_screen.dart';
 
 class ProfilScreen extends StatefulWidget {
@@ -370,26 +369,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: GestureDetector(
-          onTap: () {
-            final nav = MainNavigationController.of(context);
-            if (nav != null) {
-              nav.switchTab(0);
-            } else if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            } else {
-              Navigator.of(context).pushReplacementNamed('/dashboard');
-            }
-          },
-          child: const Padding(
-            padding: EdgeInsets.only(left: 16),
-            child: Icon(
-              Icons.arrow_back_ios_new_rounded,
-              color: Color(0xFF38BDF8),
-              size: 26,
-            ),
-          ),
-        ),
+        automaticallyImplyLeading: false,
         centerTitle: true,
         title: const Text(
           'Profile',

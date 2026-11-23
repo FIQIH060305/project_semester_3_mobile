@@ -5,7 +5,6 @@ import '../../models/jadwal_item.dart';
 import '../../services/jadwal_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/gerak_animations.dart';
-import '../main_navigation_screen.dart';
 import 'tambah_tugas_screen.dart';
 
 class JadwalScreen extends StatefulWidget {
@@ -397,40 +396,6 @@ class _JadwalScreenState extends State<JadwalScreen> {
               color: const Color(0xFFF7FAFF),
               child: Row(
                 children: [
-                  Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () {
-                        final nav = MainNavigationController.of(context);
-                        if (nav != null) {
-                          nav.switchTab(0);
-                        } else if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        } else {
-                          Navigator.of(context)
-                              .pushReplacementNamed('/dashboard');
-                        }
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFFE2E8F0),
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color: Color(0xFF0077E6),
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -952,7 +917,7 @@ class _ModernJadwalCard extends StatelessWidget {
     if (diff == 0) return 'Hari ini • $tanggalPendek';
     if (diff == 1) return 'Besok • $tanggalPendek';
     if (diff == -1) return 'Kemarin • $tanggalPendek';
-    return '${DateFormat('EEEE', 'id_ID').format(dt)} • $tanggalPendek';
+    return '${DateFormat('EEEE', 'id_ID').format(dt)} •$tanggalPendek';
   }
 
   @override

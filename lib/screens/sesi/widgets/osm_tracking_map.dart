@@ -12,10 +12,13 @@ class OsmTrackingMap extends StatefulWidget {
   final VoidCallback onToggleFollow;
   final VoidCallback? onExpand;
 
-  // Tambahan parameter opsional untuk tampilan modern & mode ringkasan rute
+  // Konfigurasi tampilan Full-Screen & Preview Ringkasan
   final bool isReadOnly;
   final bool isTrackingActive;
   final bool isGpsLoading;
+  final bool showTopStatusBadge;
+  final bool showZoomControls;
+  final double controlsBottomPadding;
   final String? gpsStatusText;
   final Color gpsStatusColor;
   final VoidCallback? onGpsActionTap;
@@ -34,11 +37,14 @@ class OsmTrackingMap extends StatefulWidget {
     this.isReadOnly = false,
     this.isTrackingActive = false,
     this.isGpsLoading = false,
+    this.showTopStatusBadge = true,
+    this.showZoomControls = true,
+    this.controlsBottomPadding = 16.0,
     this.gpsStatusText,
     this.gpsStatusColor = const Color(0xFF059669),
     this.onGpsActionTap,
     this.gpsActionLabel,
-    this.borderRadius = 22.0,
+    this.borderRadius = 0.0,
   });
 
   @override
@@ -103,7 +109,6 @@ class _OsmTrackingMapState extends State<OsmTrackingMap>
     widget.onToggleFollow();
   }
 
-  /// Hitung titik tengah dan zoom otomatis untuk rute statis (Ringkasan / Detail)
   ({LatLng center, double zoom}) _computeInitialView() {
     if (widget.rutePoints.length > 1) {
       double minLat = widget.rutePoints.first.latitude;
@@ -145,213 +150,204 @@ class _OsmTrackingMapState extends State<OsmTrackingMap>
   Widget build(BuildContext context) {
     final view = _computeInitialView();
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(widget.borderRadius),
-      child: Stack(
-        children: [
-          // ── 1. FlutterMap OpenStreetMap ──────────────────────────
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: view.center,
-              initialZoom: view.zoom,
-              minZoom: 4.0,
-              maxZoom: 19.0,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.all,
-              ),
+    final mapStack = Stack(
+      children: [
+        // ── 1. FlutterMap OpenStreetMap ──────────────────────────
+        FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: view.center,
+            initialZoom: view.zoom,
+            minZoom: 4.0,
+            maxZoom: 19.0,
+            interactionOptions: const InteractionOptions(
+              flags: InteractiveFlag.all,
             ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.gerak.mobileapp',
-                maxZoom: 19,
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.gerak.mobileapp',
+              maxZoom: 19,
+            ),
+
+            // ── Garis Rute Biru GERAK ────────────────────────────
+            if (widget.rutePoints.length > 1)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: widget.rutePoints,
+                    strokeWidth: 10.0,
+                    color: const Color(0xFF38BDF8).withValues(alpha: 0.36),
+                    strokeCap: StrokeCap.round,
+                    strokeJoin: StrokeJoin.round,
+                  ),
+                  Polyline(
+                    points: widget.rutePoints,
+                    strokeWidth: 5.5,
+                    color: const Color(0xFF0077E6),
+                    strokeCap: StrokeCap.round,
+                    strokeJoin: StrokeJoin.round,
+                  ),
+                ],
               ),
 
-              // ── Garis Rute Biru GERAK ────────────────────────────
-              if (widget.rutePoints.length > 1)
-                PolylineLayer(
-                  polylines: [
-                    // Outer soft blue glow
-                    Polyline(
-                      points: widget.rutePoints,
-                      strokeWidth: 9.0,
-                      color: const Color(0xFF38BDF8).withValues(alpha: 0.38),
-                      strokeCap: StrokeCap.round,
-                      strokeJoin: StrokeJoin.round,
+            // ── Marker Titik Awal & Posisi Pengguna ──────────────
+            MarkerLayer(
+              markers: [
+                if (widget.posisiAwal != null)
+                  Marker(
+                    point: widget.posisiAwal!,
+                    width: 34,
+                    height: 34,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.22),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.flag_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
                     ),
-                    // Core vibrant sport blue line
-                    Polyline(
-                      points: widget.rutePoints,
-                      strokeWidth: 5.0,
-                      color: const Color(0xFF0077E6),
-                      strokeCap: StrokeCap.round,
-                      strokeJoin: StrokeJoin.round,
+                  ),
+                if (widget.posisiSaatIni != null)
+                  Marker(
+                    point: widget.posisiSaatIni!,
+                    width: 54,
+                    height: 54,
+                    child: widget.isReadOnly
+                        ? _buildFinishMarker()
+                        : _buildCurrentLocationMarker(),
+                  ),
+              ],
+            ),
+          ],
+        ),
+
+        // ── 2. Badge Status GPS (Opsional untuk Mode Preview) ────
+        if (widget.showTopStatusBadge && widget.gpsStatusText != null)
+          Positioned(
+            top: 12,
+            left: 12,
+            right: 58,
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: widget.gpsStatusColor.withValues(alpha: 0.35),
+                    width: 1.1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-
-              // ── Marker Titik Awal & Posisi Pengguna ──────────────
-              MarkerLayer(
-                markers: [
-                  if (widget.posisiAwal != null)
-                    Marker(
-                      point: widget.posisiAwal!,
-                      width: 34,
-                      height: 34,
-                      child: Container(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.isGpsLoading)
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: widget.gpsStatusColor,
+                        ),
+                      )
+                    else
+                      Container(
+                        width: 8,
+                        height: 8,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF10B981),
+                          color: widget.gpsStatusColor,
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.22),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
                         ),
-                        child: const Icon(
-                          Icons.flag_rounded,
-                          color: Colors.white,
-                          size: 16,
+                      ),
+                    const SizedBox(width: 7),
+                    Flexible(
+                      child: Text(
+                        widget.gpsStatusText!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F172A),
                         ),
                       ),
                     ),
-                  if (widget.posisiSaatIni != null)
-                    Marker(
-                      point: widget.posisiSaatIni!,
-                      width: 50,
-                      height: 50,
-                      child: widget.isReadOnly
-                          ? _buildFinishMarker()
-                          : _buildCurrentLocationMarker(),
-                    ),
-                ],
-              ),
-            ],
-          ),
-
-          // ── 2. Badge Status GPS & Akurasi (Kiri Atas) ────────────
-          if (widget.gpsStatusText != null)
-            Positioned(
-              top: 12,
-              left: 12,
-              right: 58,
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.94),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: widget.gpsStatusColor.withValues(alpha: 0.35),
-                      width: 1.1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF0F172A).withValues(alpha: 0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (widget.isGpsLoading)
-                        SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: widget.gpsStatusColor,
-                          ),
-                        )
-                      else
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: widget.gpsStatusColor,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      const SizedBox(width: 7),
-                      Flexible(
-                        child: Text(
-                          widget.gpsStatusText!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else if (widget.onExpand != null)
-            Positioned(
-              top: 12,
-              left: 12,
-              child: GestureDetector(
-                onTap: widget.onExpand,
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.94),
-                    borderRadius: BorderRadius.circular(11),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.open_in_full_rounded,
-                    color: Color(0xFF1E293B),
-                    size: 18,
-                  ),
+                  ],
                 ),
               ),
             ),
+          ),
 
-          // ── 3. Tombol Re-Center & Zoom (Kanan Atas) ──────────────
-          Positioned(
-            top: 12,
-            right: 12,
+        // ── 3. Tombol My Location & Zoom (Kanan Bawah di Atas Panel) ──
+        if (!widget.isReadOnly || widget.showZoomControls)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            right: 16,
+            bottom: widget.controlsBottomPadding,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!widget.isReadOnly) ...[
+                if (widget.showZoomControls) ...[
+                  _MapControlButton(
+                    icon: Icons.add_rounded,
+                    tooltip: 'Perbesar Peta',
+                    onTap: _zoomIn,
+                  ),
+                  const SizedBox(height: 6),
+                  _MapControlButton(
+                    icon: Icons.remove_rounded,
+                    tooltip: 'Perkecil Peta',
+                    onTap: _zoomOut,
+                  ),
+                  if (!widget.isReadOnly) const SizedBox(height: 10),
+                ],
+                if (!widget.isReadOnly)
                   GestureDetector(
                     onTap: _centerToLocation,
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 38,
-                      height: 38,
+                      duration: const Duration(milliseconds: 220),
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
                         color: widget.followUser
                             ? const Color(0xFF0077E6)
-                            : Colors.white.withValues(alpha: 0.94),
-                        borderRadius: BorderRadius.circular(12),
+                            : Colors.white.withValues(alpha: 0.96),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: widget.followUser
+                              ? Colors.white
+                              : const Color(0xFFE2E8F0),
+                          width: 1.5,
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color:
-                                const Color(0xFF0F172A).withValues(alpha: 0.12),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                                const Color(0xFF0F172A).withValues(alpha: 0.16),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
@@ -359,175 +355,78 @@ class _OsmTrackingMapState extends State<OsmTrackingMap>
                         Icons.my_location_rounded,
                         color: widget.followUser
                             ? Colors.white
-                            : const Color(0xFF0F172A),
-                        size: 19,
+                            : const Color(0xFF0077E6),
+                        size: 21,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                ],
-                GestureDetector(
-                  onTap: _zoomIn,
-                  child: Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.94),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.add_rounded,
-                        size: 19, color: Color(0xFF334155)),
-                  ),
-                ),
-                const SizedBox(height: 5),
-                GestureDetector(
-                  onTap: _zoomOut,
-                  child: Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.94),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.remove_rounded,
-                        size: 19, color: Color(0xFF334155)),
-                  ),
-                ),
               ],
             ),
           ),
 
-          // ── 4. Banner Aksi Jika GPS Mati / Izin Ditolak ───────────
-          if (widget.onGpsActionTap != null && widget.gpsActionLabel != null)
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 26,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.96),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFFECACA)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.location_off_rounded,
-                        color: Color(0xFFDC2626), size: 18),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Aktifkan layanan lokasi agar rute terekam akurat.',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF334155),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: widget.onGpsActionTap,
-                      style: TextButton.styleFrom(
-                        backgroundColor: const Color(0xFF0077E6),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: Text(
-                        widget.gpsActionLabel!,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+        // ── 4. Attribution OpenStreetMap Minimalis ───────────────
+        Positioned(
+          left: 12,
+          bottom: widget.isReadOnly ? 8 : (widget.controlsBottomPadding - 2),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.80),
+              borderRadius: BorderRadius.circular(6),
             ),
-
-          // ── 5. Attribution OpenStreetMap ─────────────────────────
-          Positioned(
-            left: 10,
-            bottom: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.82),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Text(
-                '© OpenStreetMap contributors',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: Color(0xFF475569),
-                  fontWeight: FontWeight.w600,
-                ),
+            child: const Text(
+              '© OpenStreetMap',
+              style: TextStyle(
+                fontSize: 9,
+                color: Color(0xFF475569),
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
+
+    if (widget.borderRadius > 0) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        child: mapStack,
+      );
+    }
+    return mapStack;
   }
 
   Widget _buildCurrentLocationMarker() {
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (_, _) {
-        final scale = 0.88 + (_pulseController.value * 0.24);
+        final scale = 0.86 + (_pulseController.value * 0.28);
         return Stack(
           alignment: Alignment.center,
           children: [
             Transform.scale(
               scale: scale,
               child: Container(
-                width: 44,
-                height: 44,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF38BDF8).withValues(alpha: 0.32),
+                  color: const Color(0xFF38BDF8).withValues(alpha: 0.34),
                   shape: BoxShape.circle,
                 ),
               ),
             ),
             Container(
-              width: 24,
-              height: 24,
+              width: 26,
+              height: 26,
               decoration: BoxDecoration(
                 color: const Color(0xFF0077E6),
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+                border: Border.all(color: Colors.white, width: 3.2),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0077E6).withValues(alpha: 0.45),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    color: const Color(0xFF0077E6).withValues(alpha: 0.48),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
@@ -535,7 +434,7 @@ class _OsmTrackingMapState extends State<OsmTrackingMap>
                 child: Icon(
                   Icons.navigation_rounded,
                   color: Colors.white,
-                  size: 12,
+                  size: 13,
                 ),
               ),
             ),
@@ -565,6 +464,45 @@ class _OsmTrackingMapState extends State<OsmTrackingMap>
         Icons.sports_score_rounded,
         color: Colors.white,
         size: 16,
+      ),
+    );
+  }
+}
+
+class _MapControlButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _MapControlButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0F172A).withValues(alpha: 0.10),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(icon, size: 19, color: const Color(0xFF1E293B)),
+        ),
       ),
     );
   }

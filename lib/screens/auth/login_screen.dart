@@ -106,31 +106,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ── Logo & Header Rata Tengah ─────────────────────
+                    // ── Logo Clean & Header Rata Tengah ───────────────
                     GerakEntrance(
                       delayMs: 0,
                       child: Column(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withValues(alpha: 0.12),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Image.asset(
-                              'assets/images/logo_gerak.png',
-                              width: 78,
-                              height: 78,
-                            ),
+                          Image.asset(
+                            'assets/images/logo_gerak.png',
+                            width: 120,
+                            height: 120,
+                            fit: BoxFit.contain,
                           ),
-                          const SizedBox(height: 22),
+                          const SizedBox(height: 16),
                           Text(
                             'Selamat Datang 👋',
                             textAlign: TextAlign.center,
