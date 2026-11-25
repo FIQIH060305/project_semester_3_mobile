@@ -39,7 +39,6 @@ class JadwalService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Simpan metadata lokal (jam & pengaturan pengulangan) berdasarkan ID sebelum refresh
       final existingById = {
         for (final item in _jadwalList) item.id: item,
       };
@@ -53,13 +52,25 @@ class JadwalService extends ChangeNotifier {
         final tglRaw = row['tanggal_tugas']?.toString() ?? '';
         final parsedDate = DateTime.tryParse(tglRaw) ?? DateTime.now();
 
+        int jam = prev?.tanggal.hour ?? 7;
+        int menit = prev?.tanggal.minute ?? 0;
+        final waktuRaw = row['waktu_latihan']?.toString() ?? '';
+        if (waktuRaw.contains(':')) {
+          final parts = waktuRaw.split(':');
+          jam = int.tryParse(parts[0]) ?? jam;
+          menit = int.tryParse(parts[1]) ?? menit;
+        }
+
         final tglDenganJam = DateTime(
           parsedDate.year,
           parsedDate.month,
           parsedDate.day,
-          prev?.tanggal.hour ?? 7,
-          prev?.tanggal.minute ?? 0,
+          jam,
+          menit,
         );
+
+        final isFromCoach =
+            row['dari_coach'] == true || row['coach_id'] != null;
 
         _jadwalList.add(
           JadwalItem(
@@ -70,6 +81,13 @@ class JadwalService extends ChangeNotifier {
             ulangi: prev?.ulangi ?? false,
             frekuensi: prev?.frekuensi ?? FrekuensiUlang.tidakUlang,
             parentId: prev?.parentId,
+            dariCoach: isFromCoach,
+            namaCoach: row['nama_coach']?.toString(),
+            durasiMenit: row['durasi_menit'] != null
+                ? int.tryParse(row['durasi_menit'].toString())
+                : null,
+            intensitas: row['intensitas']?.toString(),
+            catatanCoach: row['catatan_coach']?.toString(),
           ),
         );
       }

@@ -13,6 +13,11 @@ import 'screens/auth/splash_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'screens/notifikasi/notifikasi_screen.dart';
 import 'screens/profil/edit_profil_screen.dart';
+import 'screens/coach/registrasi_coach_screen.dart';
+import 'screens/coach/coach_verifikasi_screen.dart';
+import 'screens/coach/coach_main_screen.dart';
+import 'screens/user/user_coach_screen.dart';
+import 'screens/user/user_diet_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +60,11 @@ class GerakApp extends StatelessWidget {
         '/notifikasi': (_) => const NotifikasiScreen(),
         '/profil': (_) => const MainNavigationScreen(initialIndex: 4),
         '/edit-profil': (_) => const EditProfilScreen(),
+        '/registrasi-coach': (_) => const RegistrasiCoachScreen(),
+        '/coach-verifikasi': (_) => const CoachVerifikasiScreen(),
+        '/coach-dashboard': (_) => const CoachMainScreen(),
+        '/user-coach': (_) => const UserCoachScreen(),
+        '/user-diet': (_) => const UserDietScreen(),
       },
     );
   }

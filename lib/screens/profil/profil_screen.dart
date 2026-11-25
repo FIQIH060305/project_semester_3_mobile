@@ -439,6 +439,76 @@ class _ProfilScreenState extends State<ProfilScreen> {
                 const SizedBox(height: 18),
                 GerakEntrance(delayMs: 280, child: _buildLogoutCard()),
                 const SizedBox(height: 20),
+                const SizedBox(height: 18),
+                GerakEntrance(
+                  delayMs: 240,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: const Color(0xFFDBEAFE), width: 1.2),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Pendampingan Coach & Diet',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            padding: const EdgeInsets.all(9),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.sports_rounded,
+                                color: Color(0xFF0066CC)),
+                          ),
+                          title: const Text('Coach Pendamping Saya',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 14)),
+                          subtitle: const Text(
+                              'Pilih pelatih & pantau program latihan',
+                              style: TextStyle(fontSize: 12)),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () =>
+                              Navigator.of(context).pushNamed('/user-coach'),
+                        ),
+                        const Divider(height: 10),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            padding: const EdgeInsets.all(9),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDCFCE7),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.restaurant_menu_rounded,
+                                color: Color(0xFF16A34A)),
+                          ),
+                          title: const Text('Rekomendasi Makanan Diet',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 14)),
+                          subtitle: const Text(
+                              'Menu nutrisi harian dari Coach kamu',
+                              style: TextStyle(fontSize: 12)),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () =>
+                              Navigator.of(context).pushNamed('/user-diet'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

@@ -55,9 +55,20 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted || _hasNavigated) return;
     _hasNavigated = true;
 
-    final targetRoute =
-        AuthService.instance.isLoggedIn ? '/dashboard' : '/login';
-    Navigator.of(context).pushReplacementNamed(targetRoute);
+    final auth = AuthService.instance;
+    if (!auth.isLoggedIn) {
+      Navigator.of(context).pushReplacementNamed('/login');
+      return;
+    }
+
+    if (auth.isCoach) {
+      final target =
+          auth.isCoachApproved ? '/coach-dashboard' : '/coach-verifikasi';
+      Navigator.of(context).pushReplacementNamed(target);
+      return;
+    }
+
+    Navigator.of(context).pushReplacementNamed('/dashboard');
   }
 
   @override

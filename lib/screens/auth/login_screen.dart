@@ -54,16 +54,28 @@ class _LoginScreenState extends State<LoginScreen> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                const Icon(Icons.error_outline_rounded,
+                    color: Colors.white, size: 20),
                 const SizedBox(width: 10),
                 Expanded(child: Text(result.message)),
               ],
             ),
             backgroundColor: const Color(0xFFD84343),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
+        return;
+      }
+
+      // ── Pengalihan Otomatis Berdasarkan Role (Coach vs User) ──────
+      final auth = AuthService.instance;
+      if (auth.isCoach) {
+        final routeName =
+            auth.isCoachApproved ? '/coach-dashboard' : '/coach-verifikasi';
+        Navigator.of(context)
+            .pushNamedAndRemoveUntil(routeName, (route) => false);
         return;
       }
 

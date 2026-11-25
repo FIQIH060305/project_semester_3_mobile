@@ -6,10 +6,67 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 typedef JsonMap = Map<String, dynamic>;
 
+class CoachProfile {
+  final String id;
+  String nama;
+  String tempatLahir;
+  String tanggalLahir;
+  int usia;
+  String noHp;
+  String? spesialisasi;
+  String? bio;
+  String statusVerifikasi; // 'pending', 'approved', 'rejected'
+  String? alasanPenolakan;
+
+  CoachProfile({
+    required this.id,
+    required this.nama,
+    required this.tempatLahir,
+    required this.tanggalLahir,
+    required this.usia,
+    required this.noHp,
+    this.spesialisasi,
+    this.bio,
+    this.statusVerifikasi = 'pending',
+    this.alasanPenolakan,
+  });
+
+  factory CoachProfile.fromJson(JsonMap json) {
+    return CoachProfile(
+      id: (json['id'] ?? '').toString(),
+      nama: (json['nama'] ?? '').toString(),
+      tempatLahir: (json['tempat_lahir'] ?? '').toString(),
+      tanggalLahir: (json['tanggal_lahir'] ?? '').toString(),
+      usia: int.tryParse((json['usia'] ?? '0').toString()) ?? 0,
+      noHp: (json['no_hp'] ?? '').toString(),
+      spesialisasi: json['spesialisasi']?.toString(),
+      bio: json['bio']?.toString(),
+      statusVerifikasi:
+          (json['status_verifikasi'] ?? 'pending').toString().toLowerCase(),
+      alasanPenolakan: json['alasan_penolakan']?.toString(),
+    );
+  }
+
+  JsonMap toJson() => {
+        'id': id,
+        'nama': nama,
+        'tempat_lahir': tempatLahir,
+        'tanggal_lahir': tanggalLahir,
+        'usia': usia,
+        'no_hp': noHp,
+        'spesialisasi': spesialisasi,
+        'bio': bio,
+        'status_verifikasi': statusVerifikasi,
+        'alasan_penolakan': alasanPenolakan,
+      };
+}
+
 class AppUser {
   final String id;
   String name;
   final String email;
+  String role; // 'user' | 'coach'
+  CoachProfile? coach;
   String? jenisKelamin;
   int? usia;
   double? tinggiBadan;
@@ -21,6 +78,8 @@ class AppUser {
     required this.id,
     required this.name,
     required this.email,
+    this.role = 'user',
+    this.coach,
     this.jenisKelamin,
     this.usia,
     this.tinggiBadan,
@@ -41,10 +100,24 @@ class AppUser {
       }
     }
 
+    CoachProfile? parsedCoach;
+    final rawCoach = json['coach'] ?? json['coach_profile'];
+    if (rawCoach is JsonMap) {
+      parsedCoach = CoachProfile.fromJson(rawCoach);
+    }
+
     return AppUser(
       id: (json['id_akun'] ?? json['id'] ?? '').toString(),
-      name: (json['nama_lengkap'] ?? json['name'] ?? 'Pengguna GERAK').toString(),
+      name: (json['nama_lengkap'] ??
+              parsedCoach?.nama ??
+              json['name'] ??
+              'Pengguna GERAK')
+          .toString(),
       email: (json['email'] ?? '').toString(),
+      role: (json['role'] ?? (parsedCoach != null ? 'coach' : 'user'))
+          .toString()
+          .toLowerCase(),
+      coach: parsedCoach,
       jenisKelamin: json['jenis_kelamin']?.toString(),
       usia: json['usia'] != null ? int.tryParse(json['usia'].toString()) : null,
       tinggiBadan: json['tinggi_badan'] != null
@@ -62,6 +135,8 @@ class AppUser {
         'id_akun': id,
         'nama_lengkap': name,
         'email': email,
+        'role': role,
+        if (coach != null) 'coach': coach!.toJson(),
         'jenis_kelamin': jenisKelamin,
         'usia': usia,
         'tinggi_badan': tinggiBadan,
@@ -88,16 +163,20 @@ class AuthService extends ChangeNotifier {
   AuthService._();
   static final AuthService instance = AuthService._();
 
-  static const String baseUrl = 'http://192.168.1.9:8000/api/mobile';
+  static const String baseUrl = 'http://192.168.1.7:8000/api/mobile';
 
   AppUser? currentUser;
   String? authToken;
+  String lastCoachClientsDebug = 'Belum memanggil /coach/klien';
 
   String? _pendingName;
   String? _pendingEmail;
   String? _pendingPassword;
 
   bool get isLoggedIn => authToken != null && authToken!.isNotEmpty;
+  bool get isCoach => currentUser?.role == 'coach';
+  bool get isCoachApproved =>
+      isCoach && currentUser?.coach?.statusVerifikasi == 'approved';
 
   static Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
@@ -149,7 +228,7 @@ class AuthService extends ChangeNotifier {
   }
 
   // =========================================================================
-  // 1. REGISTRASI 2 TAHAP
+  // 1. REGISTRASI USER (2 TAHAP) & REGISTRASI COACH
   // =========================================================================
   AuthResult register({
     required String name,
@@ -237,6 +316,78 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<AuthResult> registerCoach({
+    required String nama,
+    required String tempatLahir,
+    required DateTime tanggalLahir,
+    required String noHp,
+    required String email,
+    required String password,
+    String? spesialisasi,
+    String? bio,
+  }) async {
+    final tglStr =
+        '${tanggalLahir.year.toString().padLeft(4, '0')}-${tanggalLahir.month.toString().padLeft(2, '0')}-${tanggalLahir.day.toString().padLeft(2, '0')}';
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/register-coach'),
+            headers: _jsonHeaders,
+            body: jsonEncode({
+              'nama': nama.trim(),
+              'nama_lengkap': nama.trim(),
+              'tempat_lahir': tempatLahir.trim(),
+              'tanggal_lahir': tglStr,
+              'no_hp': noHp.trim(),
+              'email': email.trim().toLowerCase(),
+              'password': password,
+              'password_confirmation': password,
+              if (spesialisasi != null && spesialisasi.trim().isNotEmpty)
+                'spesialisasi': spesialisasi.trim(),
+              if (bio != null && bio.trim().isNotEmpty) 'bio': bio.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final body = jsonDecode(response.body) as JsonMap;
+
+      if ((response.statusCode == 201 || response.statusCode == 200) &&
+          body['success'] == true) {
+        authToken = body['token']?.toString();
+        if (body['user'] is JsonMap) {
+          final userMap = Map<String, dynamic>.from(body['user'] as JsonMap);
+          userMap['role'] = 'coach';
+          final rawCoach = body['coach'] ?? body['coach_profile'];
+          if (rawCoach is JsonMap) {
+            userMap['coach'] = rawCoach;
+          }
+          currentUser = AppUser.fromJson(userMap);
+        }
+        await _persistSession(authToken, currentUser);
+        notifyListeners();
+
+        return AuthResult(
+          isSuccess: true,
+          message: body['message']?.toString() ??
+              'Pendaftaran Coach berhasil! Menunggu verifikasi Admin.',
+          user: currentUser,
+          token: authToken,
+        );
+      }
+
+      return AuthResult(
+        isSuccess: false,
+        message: _extractErrorMessage(body, 'Pendaftaran Coach gagal.'),
+      );
+    } catch (_) {
+      return AuthResult(
+        isSuccess: false,
+        message: 'Tidak dapat terhubung ke server Laravel.',
+      );
+    }
+  }
+
   // =========================================================================
   // 2. LOGIN & LOGOUT
   // =========================================================================
@@ -261,7 +412,12 @@ class AuthService extends ChangeNotifier {
       if (response.statusCode == 200 && body['success'] == true) {
         authToken = body['token']?.toString();
         if (body['user'] is JsonMap) {
-          currentUser = AppUser.fromJson(body['user'] as JsonMap);
+          final userMap = Map<String, dynamic>.from(body['user'] as JsonMap);
+          final rawCoach = body['coach'] ?? body['coach_profile'];
+          if (rawCoach is JsonMap) {
+            userMap['coach'] = rawCoach;
+          }
+          currentUser = AppUser.fromJson(userMap);
         }
         await _persistSession(authToken, currentUser);
         notifyListeners();
@@ -544,7 +700,7 @@ class AuthService extends ChangeNotifier {
   }
 
   // =========================================================================
-  // 6. AMBIL RIWAYAT OLAHRAGA USER DARI DATABASE LARAVEL
+  // 6. RIWAYAT OLAHRAGA, JADWAL, NOTIFIKASI, EDUKASI & BERAT BADAN USER
   // =========================================================================
   Future<List<JsonMap>> fetchRiwayatOlahraga() async {
     if (!isLoggedIn) return [];
@@ -562,9 +718,7 @@ class AuthService extends ChangeNotifier {
     } catch (_) {}
     return [];
   }
-  // =========================================================================
-  // 7. JADWAL OLAHRAGA, NOTIFIKASI & KONTEN EDUKASI DARI DATABASE LARAVEL
-  // =========================================================================
+
   Future<List<JsonMap>> fetchJadwalList() async {
     if (!isLoggedIn) return [];
     try {
@@ -697,9 +851,7 @@ class AuthService extends ChangeNotifier {
     } catch (_) {}
     return [];
   }
-  // =========================================================================
-  // 8. PEMANTAUAN PROGRES BERAT BADAN MINGGUAN (SENIN - MINGGU)
-  // =========================================================================
+
   Future<JsonMap?> fetchWeeklyWeightProgress({int weekOffset = 0}) async {
     if (!isLoggedIn) return null;
     try {
@@ -777,5 +929,467 @@ class AuthService extends ChangeNotifier {
         message: 'Tidak dapat terhubung ke server Laravel.',
       );
     }
+  }
+
+  // =========================================================================
+  // 7. PORTAL COACH (STATUS VERIFIKASI, DASHBOARD, KLIEN & REKOMENDASI)
+  // =========================================================================
+  Future<CoachProfile?> refreshCoachStatus() async {
+    if (!isLoggedIn) return null;
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/coach/verification-status'),
+              headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        final rawCoach =
+            body['coach'] ?? body['coach_profile'] ?? body['data'];
+        if (body['success'] == true &&
+            rawCoach is JsonMap &&
+            currentUser != null) {
+          currentUser!.coach = CoachProfile.fromJson(rawCoach);
+          currentUser!.name = currentUser!.coach!.nama;
+          await _persistSession(authToken, currentUser);
+          notifyListeners();
+          return currentUser!.coach;
+        }
+      }
+    } catch (_) {}
+    return currentUser?.coach;
+  }
+
+  Future<JsonMap?> fetchCoachDashboard() async {
+    if (!isLoggedIn) {
+      debugPrint('[COACH_DASHBOARD] Token kosong / belum login');
+      return null;
+    }
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/coach/dashboard'), headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      debugPrint('[COACH_DASHBOARD] Status: ${response.statusCode}');
+      debugPrint('[COACH_DASHBOARD] Body: ${response.body}');
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is JsonMap) {
+          return body['data'] as JsonMap;
+        }
+      }
+    } catch (e) {
+      debugPrint('[COACH_DASHBOARD] Exception: $e');
+    }
+    return null;
+  }
+
+  JsonMap _normalizeClientMap(dynamic raw, {String defaultStatus = 'active'}) {
+    final map = Map<String, dynamic>.from(raw as Map);
+    final status =
+        (map['status_hubungan'] ?? map['status'] ?? defaultStatus).toString();
+    final relId = (map['relasi_id'] ?? map['id'] ?? '').toString();
+    final userId = (map['id_akun'] ?? map['user_id'] ?? '').toString();
+
+    map['relasi_id'] = relId;
+    map['id'] = relId;
+    map['status_hubungan'] = status;
+    map['status'] = status;
+    map['id_akun'] = userId;
+    map['user_id'] = userId;
+    map['user'] = Map<String, dynamic>.from(map);
+    return map;
+  }
+
+  Future<List<JsonMap>> fetchCoachClients() async {
+    if (!isLoggedIn) {
+      lastCoachClientsDebug = 'Token kosong / belum login';
+      debugPrint('[COACH_KLIEN] $lastCoachClientsDebug');
+      return [];
+    }
+    try {
+      final url = '$baseUrl/coach/klien';
+      final response = await http
+          .get(Uri.parse(url), headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+
+      lastCoachClientsDebug =
+          'URL: $url\nCoach ID Login: ${currentUser?.coach?.id ?? '-'}\nHTTP ${response.statusCode}:\n${response.body}';
+      debugPrint('[COACH_KLIEN] $lastCoachClientsDebug');
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true) {
+          final rawData = body['data'];
+          if (rawData is JsonMap) {
+            final pendingList = (rawData['pending'] as List? ?? [])
+                .map((e) => _normalizeClientMap(e, defaultStatus: 'pending'))
+                .toList();
+            final aktifList = (rawData['aktif'] as List? ?? [])
+                .map((e) => _normalizeClientMap(e, defaultStatus: 'active'))
+                .toList();
+            return [...pendingList, ...aktifList];
+          }
+          if (rawData is List) {
+            return rawData.map((e) => _normalizeClientMap(e)).toList();
+          }
+        }
+      }
+    } catch (e) {
+      lastCoachClientsDebug = 'Error koneksi: $e';
+      debugPrint('[COACH_KLIEN] $lastCoachClientsDebug');
+    }
+    return [];
+  }
+
+  Future<AuthResult> respondCoachClient(String clientRelId, String aksi) async {
+    final normalizedAksi =
+        (aksi == 'approve' || aksi == 'terima' || aksi == 'active')
+            ? 'approve'
+            : 'reject';
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/coach/klien/$clientRelId/respond'),
+            headers: _jsonHeaders,
+            body: jsonEncode({'aksi': normalizedAksi}),
+          )
+          .timeout(const Duration(seconds: 12));
+      final body = jsonDecode(response.body) as JsonMap;
+      return AuthResult(
+        isSuccess: response.statusCode == 200 && body['success'] == true,
+        message: body['message']?.toString() ?? 'Status klien diperbarui.',
+      );
+    } catch (_) {
+      return AuthResult(
+          isSuccess: false, message: 'Gagal terhubung ke server.');
+    }
+  }
+
+  Future<JsonMap?> fetchCoachClientDetail(String userId) async {
+    if (!isLoggedIn) return null;
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/coach/klien/$userId'),
+              headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is JsonMap) {
+          return body['data'] as JsonMap;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<AuthResult> updateCoachProfile({
+    required String nama,
+    required String tempatLahir,
+    required String tanggalLahir,
+    required String noHp,
+    String? spesialisasi,
+    String? bio,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/coach/profile/update'),
+            headers: _jsonHeaders,
+            body: jsonEncode({
+              'nama': nama.trim(),
+              'tempat_lahir': tempatLahir.trim(),
+              'tanggal_lahir': tanggalLahir,
+              'no_hp': noHp.trim(),
+              'spesialisasi': spesialisasi?.trim(),
+              'bio': bio?.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      final body = jsonDecode(response.body) as JsonMap;
+      if (response.statusCode == 200 && body['success'] == true) {
+        final rawCoach = body['coach'] ?? body['coach_profile'];
+        if (rawCoach is JsonMap && currentUser != null) {
+          currentUser!.coach = CoachProfile.fromJson(rawCoach);
+          currentUser!.name = currentUser!.coach!.nama;
+          await _persistSession(authToken, currentUser);
+          notifyListeners();
+        }
+        return AuthResult(
+          isSuccess: true,
+          message: body['message']?.toString() ?? 'Profil Coach diperbarui!',
+        );
+      }
+      return AuthResult(
+        isSuccess: false,
+        message: _extractErrorMessage(body, 'Gagal memperbarui profil Coach.'),
+      );
+    } catch (_) {
+      return AuthResult(
+          isSuccess: false, message: 'Gagal terhubung ke server.');
+    }
+  }
+
+  Future<List<JsonMap>> fetchCoachNotifikasi() async {
+    if (!isLoggedIn) return [];
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/coach/notifikasi'), headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is List) {
+          return List<JsonMap>.from(body['data'] as List);
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<void> markCoachNotifikasiRead() async {
+    if (!isLoggedIn) return;
+    try {
+      await http
+          .post(Uri.parse('$baseUrl/coach/notifikasi/baca'),
+              headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
+  }
+
+  // --- CRUD Rekomendasi Olahraga (Coach) ---
+  Future<List<JsonMap>> fetchCoachRekomendasiOlahraga({String? userId}) async {
+    if (!isLoggedIn) return [];
+    try {
+      final uri = Uri.parse(
+        userId != null
+            ? '$baseUrl/coach/rekomendasi-olahraga?user_id=$userId'
+            : '$baseUrl/coach/rekomendasi-olahraga',
+      );
+      final response = await http
+          .get(uri, headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is List) {
+          return List<JsonMap>.from(body['data'] as List);
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<AuthResult> saveCoachRekomendasiOlahraga({
+    String? id,
+    required JsonMap payload,
+  }) async {
+    try {
+      final uri = id == null
+          ? Uri.parse('$baseUrl/coach/rekomendasi-olahraga')
+          : Uri.parse('$baseUrl/coach/rekomendasi-olahraga/$id');
+      final response = await (id == null
+              ? http.post(uri,
+                  headers: _jsonHeaders, body: jsonEncode(payload))
+              : http.put(uri,
+                  headers: _jsonHeaders, body: jsonEncode(payload)))
+          .timeout(const Duration(seconds: 15));
+
+      final body = jsonDecode(response.body) as JsonMap;
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          body['success'] == true) {
+        return AuthResult(
+          isSuccess: true,
+          message: body['message']?.toString() ??
+              'Rekomendasi olahraga berhasil disimpan.',
+        );
+      }
+      return AuthResult(
+        isSuccess: false,
+        message: _extractErrorMessage(body, 'Gagal menyimpan rekomendasi.'),
+      );
+    } catch (_) {
+      return AuthResult(
+          isSuccess: false, message: 'Gagal terhubung ke server.');
+    }
+  }
+
+  Future<bool> deleteCoachRekomendasiOlahraga(String id) async {
+    try {
+      final response = await http
+          .delete(Uri.parse('$baseUrl/coach/rekomendasi-olahraga/$id'),
+              headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        return body['success'] == true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  // --- CRUD Rekomendasi Makanan Diet (Coach) ---
+  Future<List<JsonMap>> fetchCoachRekomendasiMakanan({String? userId}) async {
+    if (!isLoggedIn) return [];
+    try {
+      final uri = Uri.parse(
+        userId != null
+            ? '$baseUrl/coach/rekomendasi-makanan?user_id=$userId'
+            : '$baseUrl/coach/rekomendasi-makanan',
+      );
+      final response = await http
+          .get(uri, headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is List) {
+          return List<JsonMap>.from(body['data'] as List);
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<AuthResult> saveCoachRekomendasiMakanan({
+    String? id,
+    required JsonMap payload,
+  }) async {
+    try {
+      final uri = id == null
+          ? Uri.parse('$baseUrl/coach/rekomendasi-makanan')
+          : Uri.parse('$baseUrl/coach/rekomendasi-makanan/$id');
+      final response = await (id == null
+              ? http.post(uri,
+                  headers: _jsonHeaders, body: jsonEncode(payload))
+              : http.put(uri,
+                  headers: _jsonHeaders, body: jsonEncode(payload)))
+          .timeout(const Duration(seconds: 15));
+
+      final body = jsonDecode(response.body) as JsonMap;
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          body['success'] == true) {
+        return AuthResult(
+          isSuccess: true,
+          message: body['message']?.toString() ??
+              'Rekomendasi makanan diet berhasil disimpan.',
+        );
+      }
+      return AuthResult(
+        isSuccess: false,
+        message:
+            _extractErrorMessage(body, 'Gagal menyimpan rekomendasi makanan.'),
+      );
+    } catch (_) {
+      return AuthResult(
+          isSuccess: false, message: 'Gagal terhubung ke server.');
+    }
+  }
+
+  Future<bool> deleteCoachRekomendasiMakanan(String id) async {
+    try {
+      final response = await http
+          .delete(Uri.parse('$baseUrl/coach/rekomendasi-makanan/$id'),
+              headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        return body['success'] == true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  // =========================================================================
+  // 8. SISI USER: PILIH COACH & LIHAT REKOMENDASI MAKANAN DIET
+  // =========================================================================
+  Future<List<JsonMap>> fetchAvailableCoaches() async {
+    if (!isLoggedIn) return [];
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/coaches'), headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is List) {
+          return List<JsonMap>.from(body['data'] as List);
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<JsonMap?> fetchMyCoach() async {
+    if (!isLoggedIn) return null;
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/rekomendasi-coach'), headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is JsonMap) {
+          final data = body['data'] as JsonMap;
+          final coachAktif = data['coach_aktif'] ?? data['coach'];
+          if (coachAktif is JsonMap) {
+            return {
+              ...coachAktif,
+              'status': 'active',
+              'coach': coachAktif,
+            };
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<AuthResult> pilihCoach(String coachId, {String? catatan}) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/coaches/$coachId/request'),
+            headers: _jsonHeaders,
+            body: jsonEncode({
+              if (catatan != null && catatan.trim().isNotEmpty)
+                'catatan': catatan.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      final body = jsonDecode(response.body) as JsonMap;
+      return AuthResult(
+        isSuccess: (response.statusCode == 200 || response.statusCode == 201) &&
+            body['success'] == true,
+        message: body['message']?.toString() ??
+            'Permintaan pendampingan dikirim ke Coach.',
+      );
+    } catch (_) {
+      return AuthResult(
+          isSuccess: false, message: 'Gagal terhubung ke server.');
+    }
+  }
+
+  Future<List<JsonMap>> fetchUserRekomendasiMakanan() async {
+    if (!isLoggedIn) return [];
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/rekomendasi-coach'), headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true) {
+          if (body['data'] is JsonMap) {
+            final data = body['data'] as JsonMap;
+            if (data['rekomendasi_makanan'] is List) {
+              return List<JsonMap>.from(data['rekomendasi_makanan'] as List);
+            }
+            if (data['makanan'] is List) {
+              return List<JsonMap>.from(data['makanan'] as List);
+            }
+          }
+          if (body['data'] is List) {
+            return List<JsonMap>.from(body['data'] as List);
+          }
+        }
+      }
+    } catch (_) {}
+    return [];
   }
 }

@@ -1,13 +1,11 @@
 import 'dart:convert';
 
-/// Jenis frekuensi pengulangan jadwal
 enum FrekuensiUlang {
-  tidakUlang,    // Jadwal sekali saja
-  sekaliSehari,  // Berulang setiap hari
-  sekaliSeminggu // Berulang setiap minggu pada hari yang sama
+  tidakUlang,
+  sekaliSehari,
+  sekaliSeminggu,
 }
 
-/// Model untuk satu jadwal latihan
 class JadwalItem {
   final String id;
   String judul;
@@ -15,10 +13,14 @@ class JadwalItem {
   bool selesai;
   bool ulangi;
   FrekuensiUlang frekuensi;
-
-  /// ID jadwal "induk" yang memulai rantai pengulangan.
-  /// Null jika ini adalah jadwal induk itu sendiri.
   String? parentId;
+
+  // Penanda khusus apabila jadwal diberikan oleh Coach
+  final bool dariCoach;
+  final String? namaCoach;
+  final int? durasiMenit;
+  final String? intensitas;
+  final String? catatanCoach;
 
   JadwalItem({
     required this.id,
@@ -28,9 +30,13 @@ class JadwalItem {
     this.ulangi = false,
     this.frekuensi = FrekuensiUlang.tidakUlang,
     this.parentId,
+    this.dariCoach = false,
+    this.namaCoach,
+    this.durasiMenit,
+    this.intensitas,
+    this.catatanCoach,
   });
 
-  /// Menentukan kategori waktu untuk pengelompokan UI
   String get kategoriWaktu {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -44,7 +50,6 @@ class JadwalItem {
     return 'Minggu depan';
   }
 
-  /// Label badge kecil di kartu
   String get labelBadge {
     if (selesai) return 'Tuntas';
     if (kategoriWaktu == 'Terlambat') return 'Terlewat';
@@ -53,8 +58,10 @@ class JadwalItem {
     return 'Terjadwal';
   }
 
-  /// Ekstrak informasi target durasi / repetisi / jarak dari judul latihan (jika ada)
   String? get infoTargetLatihan {
+    if (durasiMenit != null && durasiMenit! > 0) {
+      return '$durasiMenit menit';
+    }
     final regex = RegExp(
       r'(\d+(?:[.,]\d+)?\s*(?:menit|mnt|jam|detik|repetisi|rep|set|kali|km|meter|m))',
       caseSensitive: false,
@@ -63,14 +70,12 @@ class JadwalItem {
     return match?.group(1);
   }
 
-  /// Format jam singkat (contoh: 07.00)
   String get jamFormatted {
     final h = tanggal.hour.toString().padLeft(2, '0');
     final m = tanggal.minute.toString().padLeft(2, '0');
     return '$h.$m';
   }
 
-  /// Hitung tanggal kemunculan berikutnya berdasarkan frekuensi
   DateTime get tanggalBerikutnya {
     switch (frekuensi) {
       case FrekuensiUlang.sekaliSehari:
@@ -82,7 +87,6 @@ class JadwalItem {
     }
   }
 
-  /// Buat salinan jadwal berikutnya (untuk recurring) dengan ID baru
   JadwalItem buatJadwalBerikutnya() {
     return JadwalItem(
       id: '${DateTime.now().millisecondsSinceEpoch}_${id.hashCode}',
@@ -92,10 +96,14 @@ class JadwalItem {
       ulangi: ulangi,
       frekuensi: frekuensi,
       parentId: parentId ?? id,
+      dariCoach: dariCoach,
+      namaCoach: namaCoach,
+      durasiMenit: durasiMenit,
+      intensitas: intensitas,
+      catatanCoach: catatanCoach,
     );
   }
 
-  /// Buat salinan dengan nilai yang diubah (untuk edit)
   JadwalItem copyWith({
     String? id,
     String? judul,
@@ -104,6 +112,11 @@ class JadwalItem {
     bool? ulangi,
     FrekuensiUlang? frekuensi,
     String? parentId,
+    bool? dariCoach,
+    String? namaCoach,
+    int? durasiMenit,
+    String? intensitas,
+    String? catatanCoach,
   }) {
     return JadwalItem(
       id: id ?? this.id,
@@ -113,10 +126,13 @@ class JadwalItem {
       ulangi: ulangi ?? this.ulangi,
       frekuensi: frekuensi ?? this.frekuensi,
       parentId: parentId ?? this.parentId,
+      dariCoach: dariCoach ?? this.dariCoach,
+      namaCoach: namaCoach ?? this.namaCoach,
+      durasiMenit: durasiMenit ?? this.durasiMenit,
+      intensitas: intensitas ?? this.intensitas,
+      catatanCoach: catatanCoach ?? this.catatanCoach,
     );
   }
-
-  // ─── Serialization ─────────────────────────────────────────────
 
   Map<String, dynamic> toJson() {
     return {
@@ -127,6 +143,11 @@ class JadwalItem {
       'ulangi': ulangi,
       'frekuensi': frekuensi.index,
       'parentId': parentId,
+      'dariCoach': dariCoach,
+      'namaCoach': namaCoach,
+      'durasiMenit': durasiMenit,
+      'intensitas': intensitas,
+      'catatanCoach': catatanCoach,
     };
   }
 
@@ -139,6 +160,11 @@ class JadwalItem {
       ulangi: json['ulangi'] as bool? ?? false,
       frekuensi: FrekuensiUlang.values[json['frekuensi'] as int? ?? 0],
       parentId: json['parentId'] as String?,
+      dariCoach: json['dariCoach'] as bool? ?? false,
+      namaCoach: json['namaCoach'] as String?,
+      durasiMenit: json['durasiMenit'] as int?,
+      intensitas: json['intensitas'] as String?,
+      catatanCoach: json['catatanCoach'] as String?,
     );
   }
 
@@ -154,7 +180,6 @@ class JadwalItem {
   }
 }
 
-/// Data dummy awal (digunakan sekali saat mode offline pertama kali)
 List<JadwalItem> dataDummyJadwal() {
   final now = DateTime.now();
   return [
@@ -167,38 +192,11 @@ List<JadwalItem> dataDummyJadwal() {
       frekuensi: FrekuensiUlang.sekaliSehari,
     ),
     JadwalItem(
-      id: '2',
-      judul: 'Jalan 20 menit',
-      tanggal: DateTime(now.year, now.month, now.day, 7, 0)
-          .subtract(const Duration(days: 2)),
-      ulangi: true,
-      frekuensi: FrekuensiUlang.sekaliSehari,
-    ),
-    JadwalItem(
       id: '3',
       judul: 'Berlari 30 menit',
       tanggal: DateTime(now.year, now.month, now.day + 1, 8, 0),
       ulangi: true,
       frekuensi: FrekuensiUlang.sekaliSeminggu,
-    ),
-    JadwalItem(
-      id: '4',
-      judul: 'Berlari 30 menit',
-      tanggal: DateTime(now.year, now.month, now.day + 1, 8, 0),
-      ulangi: false,
-    ),
-    JadwalItem(
-      id: '5',
-      judul: 'Push Up 25 repetisi',
-      tanggal: DateTime(now.year, now.month, now.day + 4, 8, 0),
-      ulangi: true,
-      frekuensi: FrekuensiUlang.sekaliSeminggu,
-    ),
-    JadwalItem(
-      id: '6',
-      judul: 'Pull Up 30 Repetisi',
-      tanggal: DateTime(now.year, now.month, now.day + 5, 8, 0),
-      ulangi: false,
     ),
   ];
 }
