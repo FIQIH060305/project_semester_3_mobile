@@ -43,8 +43,16 @@ class JadwalService extends ChangeNotifier {
         for (final item in _jadwalList) item.id: item,
       };
 
-      final rows = await AuthService.instance.fetchJadwalList();
+      final results = await Future.wait([
+        AuthService.instance.fetchJadwalList(),
+        AuthService.instance.fetchUserRekomendasiOlahraga(),
+      ]);
+
+      final rows = results[0];
+      final rekomRows = results[1];
+
       _jadwalList.clear();
+      final linkedRekomIds = <String>{};
 
       for (final row in rows) {
         final idStr = (row['id_jadwal'] ?? '').toString();
@@ -71,6 +79,10 @@ class JadwalService extends ChangeNotifier {
 
         final isFromCoach =
             row['dari_coach'] == true || row['coach_id'] != null;
+        final rekomId = row['rekomendasi_id']?.toString();
+        if (rekomId != null && rekomId.isNotEmpty) {
+          linkedRekomIds.add(rekomId);
+        }
 
         _jadwalList.add(
           JadwalItem(
@@ -81,13 +93,71 @@ class JadwalService extends ChangeNotifier {
             ulangi: prev?.ulangi ?? false,
             frekuensi: prev?.frekuensi ?? FrekuensiUlang.tidakUlang,
             parentId: prev?.parentId,
-            dariCoach: isFromCoach,
-            namaCoach: row['nama_coach']?.toString(),
+            dariPelatih: isFromCoach,
+            rekomendasiId: rekomId,
+            namaPelatih: row['nama_coach']?.toString(),
             durasiMenit: row['durasi_menit'] != null
                 ? int.tryParse(row['durasi_menit'].toString())
                 : null,
             intensitas: row['intensitas']?.toString(),
-            catatanCoach: row['catatan_coach']?.toString(),
+            targetLatihan: row['target']?.toString(),
+            catatanPelatih: row['catatan_coach']?.toString(),
+            statusPersetujuan:
+                (row['status_persetujuan'] ?? 'accepted').toString(),
+            alasanPenolakan: row['alasan_penolakan']?.toString(),
+          ),
+        );
+      }
+
+      // Tambahkan rekomendasi jadwal olahraga dari Pelatih yang belum masuk daftar jadwal (misal status pending)
+      for (final r in rekomRows) {
+        final rId = (r['id'] ?? '').toString();
+        if (rId.isEmpty || linkedRekomIds.contains(rId)) continue;
+
+        final statusUser =
+            (r['status_user'] ?? r['status'] ?? 'pending').toString();
+        if (statusUser == 'rejected') continue;
+
+        final tglRaw =
+            (r['tanggal'] ?? r['tanggal_latihan'] ?? '').toString();
+        final parsedDate = DateTime.tryParse(tglRaw) ?? DateTime.now();
+
+        int jam = 7;
+        int menit = 0;
+        final waktuRaw =
+            (r['waktu'] ?? r['waktu_latihan'] ?? '07:00').toString();
+        if (waktuRaw.contains(':')) {
+          final parts = waktuRaw.split(':');
+          jam = int.tryParse(parts[0]) ?? jam;
+          menit = int.tryParse(parts[1]) ?? menit;
+        }
+
+        _jadwalList.add(
+          JadwalItem(
+            id: 'rekom_$rId',
+            judul: (r['nama_olahraga'] ?? r['judul_latihan'] ?? 'Latihan')
+                .toString(),
+            tanggal: DateTime(
+              parsedDate.year,
+              parsedDate.month,
+              parsedDate.day,
+              jam,
+              menit,
+            ),
+            selesai: false,
+            dariPelatih: true,
+            rekomendasiId: rId,
+            namaPelatih:
+                (r['nama_coach'] ?? r['coach']?['nama'] ?? 'Pelatih GERAK')
+                    .toString(),
+            durasiMenit: r['durasi'] != null
+                ? int.tryParse(r['durasi'].toString())
+                : null,
+            intensitas: r['intensitas']?.toString(),
+            targetLatihan: r['target']?.toString(),
+            catatanPelatih: r['catatan']?.toString(),
+            statusPersetujuan: statusUser,
+            alasanPenolakan: r['alasan_penolakan']?.toString(),
           ),
         );
       }
@@ -97,29 +167,55 @@ class JadwalService extends ChangeNotifier {
     }
   }
 
+  Future<AuthResult> respondRekomendasiPelatih({
+    required JadwalItem item,
+    required String aksi, // 'accepted' | 'rejected'
+    String? catatan,
+  }) async {
+    final rekomId = item.rekomendasiId ?? item.id.replaceFirst('rekom_', '');
+    final res = await AuthService.instance.respondRekomendasiOlahraga(
+      rekomendasiId: rekomId,
+      aksi: aksi,
+      catatan: catatan,
+    );
+    if (res.isSuccess) {
+      await syncFromServer();
+    }
+    return res;
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // QUERIES PENGELOMPOKAN
   // ═══════════════════════════════════════════════════════════════
 
-  List<JadwalItem> get terlambat =>
-      _jadwalList.where((j) => j.kategoriWaktu == 'Terlambat').toList()
+  List<JadwalItem> get menungguPersetujuan =>
+      _jadwalList.where((j) => j.menungguKonfirmasi).toList()
         ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
 
-  List<JadwalItem> get hariIni =>
-      _jadwalList.where((j) => j.kategoriWaktu == 'Hari ini').toList()
-        ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
+  List<JadwalItem> get terlambat => _jadwalList
+      .where((j) => !j.menungguKonfirmasi && j.kategoriWaktu == 'Terlambat')
+      .toList()
+    ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
 
-  List<JadwalItem> get besok =>
-      _jadwalList.where((j) => j.kategoriWaktu == 'Besok').toList()
-        ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
+  List<JadwalItem> get hariIni => _jadwalList
+      .where((j) => !j.menungguKonfirmasi && j.kategoriWaktu == 'Hari ini')
+      .toList()
+    ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
 
-  List<JadwalItem> get mingguDepan =>
-      _jadwalList.where((j) => j.kategoriWaktu == 'Minggu depan').toList()
-        ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
+  List<JadwalItem> get besok => _jadwalList
+      .where((j) => !j.menungguKonfirmasi && j.kategoriWaktu == 'Besok')
+      .toList()
+    ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
 
-  List<JadwalItem> get riwayatSelesai =>
-      _jadwalList.where((j) => j.kategoriWaktu == 'Selesai').toList()
-        ..sort((a, b) => b.tanggal.compareTo(a.tanggal));
+  List<JadwalItem> get mingguDepan => _jadwalList
+      .where((j) => !j.menungguKonfirmasi && j.kategoriWaktu == 'Minggu depan')
+      .toList()
+    ..sort((a, b) => a.tanggal.compareTo(b.tanggal));
+
+  List<JadwalItem> get riwayatSelesai => _jadwalList
+      .where((j) => !j.menungguKonfirmasi && j.kategoriWaktu == 'Selesai')
+      .toList()
+    ..sort((a, b) => b.tanggal.compareTo(a.tanggal));
 
   int get jumlahBelumSelesai => _jadwalList.where((j) => !j.selesai).length;
 
@@ -135,7 +231,7 @@ class JadwalService extends ChangeNotifier {
             : sisaHariKeAkhirMinggu));
 
     return _jadwalList.where((j) {
-      if (j.selesai) return false;
+      if (j.selesai || j.menungguKonfirmasi) return false;
       final tgl = DateTime(j.tanggal.year, j.tanggal.month, j.tanggal.day);
       return tgl.compareTo(today) >= 0 && tgl.compareTo(akhirMinggu) <= 0;
     }).length;
@@ -169,7 +265,7 @@ class JadwalService extends ChangeNotifier {
     _jadwalList.removeWhere((j) => j.id == id);
     notifyListeners();
 
-    if (AuthService.instance.isLoggedIn) {
+    if (AuthService.instance.isLoggedIn && !id.startsWith('rekom_')) {
       await AuthService.instance.deleteJadwalOnServer(id);
     }
   }
@@ -200,7 +296,7 @@ class JadwalService extends ChangeNotifier {
     _jadwalList[idx] = itemBaru;
     notifyListeners();
 
-    if (AuthService.instance.isLoggedIn) {
+    if (AuthService.instance.isLoggedIn && !id.startsWith('rekom_')) {
       await AuthService.instance.deleteJadwalOnServer(id);
       final created = await AuthService.instance.createJadwalOnServer(
         tugas: itemBaru.judul,
@@ -218,6 +314,8 @@ class JadwalService extends ChangeNotifier {
   }
 
   Future<void> toggleSelesai(JadwalItem item) async {
+    if (item.menungguKonfirmasi) return;
+
     final idx = _jadwalList.indexWhere((j) => j.id == item.id);
     if (idx == -1) return;
 
@@ -234,7 +332,7 @@ class JadwalService extends ChangeNotifier {
 
     notifyListeners();
 
-    if (AuthService.instance.isLoggedIn) {
+    if (AuthService.instance.isLoggedIn && !jadwal.id.startsWith('rekom_')) {
       await AuthService.instance.toggleJadwalOnServer(jadwal.id);
     }
   }

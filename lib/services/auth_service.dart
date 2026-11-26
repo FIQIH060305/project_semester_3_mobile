@@ -228,7 +228,7 @@ class AuthService extends ChangeNotifier {
   }
 
   // =========================================================================
-  // 1. REGISTRASI USER (2 TAHAP) & REGISTRASI COACH
+  // 1. REGISTRASI PESERTA (2 TAHAP) & REGISTRASI PELATIH
   // =========================================================================
   AuthResult register({
     required String name,
@@ -370,7 +370,7 @@ class AuthService extends ChangeNotifier {
         return AuthResult(
           isSuccess: true,
           message: body['message']?.toString() ??
-              'Pendaftaran Coach berhasil! Menunggu verifikasi Admin.',
+              'Pendaftaran Pelatih berhasil! Menunggu verifikasi Admin.',
           user: currentUser,
           token: authToken,
         );
@@ -378,7 +378,7 @@ class AuthService extends ChangeNotifier {
 
       return AuthResult(
         isSuccess: false,
-        message: _extractErrorMessage(body, 'Pendaftaran Coach gagal.'),
+        message: _extractErrorMessage(body, 'Pendaftaran Pelatih gagal.'),
       );
     } catch (_) {
       return AuthResult(
@@ -700,7 +700,7 @@ class AuthService extends ChangeNotifier {
   }
 
   // =========================================================================
-  // 6. RIWAYAT OLAHRAGA, JADWAL, NOTIFIKASI, EDUKASI & BERAT BADAN USER
+  // 6. RIWAYAT OLAHRAGA, JADWAL, NOTIFIKASI, EDUKASI & BERAT BADAN PESERTA
   // =========================================================================
   Future<List<JsonMap>> fetchRiwayatOlahraga() async {
     if (!isLoggedIn) return [];
@@ -932,7 +932,7 @@ class AuthService extends ChangeNotifier {
   }
 
   // =========================================================================
-  // 7. PORTAL COACH (STATUS VERIFIKASI, DASHBOARD, KLIEN & REKOMENDASI)
+  // 7. PORTAL PELATIH (STATUS VERIFIKASI, DASHBOARD, PESERTA & REKOMENDASI)
   // =========================================================================
   Future<CoachProfile?> refreshCoachStatus() async {
     if (!isLoggedIn) return null;
@@ -962,15 +962,15 @@ class AuthService extends ChangeNotifier {
 
   Future<JsonMap?> fetchCoachDashboard() async {
     if (!isLoggedIn) {
-      debugPrint('[COACH_DASHBOARD] Token kosong / belum login');
+      debugPrint('[PELATIH_DASHBOARD] Token kosong / belum login');
       return null;
     }
     try {
       final response = await http
           .get(Uri.parse('$baseUrl/coach/dashboard'), headers: _jsonHeaders)
           .timeout(const Duration(seconds: 12));
-      debugPrint('[COACH_DASHBOARD] Status: ${response.statusCode}');
-      debugPrint('[COACH_DASHBOARD] Body: ${response.body}');
+      debugPrint('[PELATIH_DASHBOARD] Status: ${response.statusCode}');
+      debugPrint('[PELATIH_DASHBOARD] Body: ${response.body}');
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as JsonMap;
         if (body['success'] == true && body['data'] is JsonMap) {
@@ -978,7 +978,7 @@ class AuthService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('[COACH_DASHBOARD] Exception: $e');
+      debugPrint('[PELATIH_DASHBOARD] Exception: $e');
     }
     return null;
   }
@@ -1003,7 +1003,7 @@ class AuthService extends ChangeNotifier {
   Future<List<JsonMap>> fetchCoachClients() async {
     if (!isLoggedIn) {
       lastCoachClientsDebug = 'Token kosong / belum login';
-      debugPrint('[COACH_KLIEN] $lastCoachClientsDebug');
+      debugPrint('[PELATIH_PESERTA] $lastCoachClientsDebug');
       return [];
     }
     try {
@@ -1013,8 +1013,8 @@ class AuthService extends ChangeNotifier {
           .timeout(const Duration(seconds: 12));
 
       lastCoachClientsDebug =
-          'URL: $url\nCoach ID Login: ${currentUser?.coach?.id ?? '-'}\nHTTP ${response.statusCode}:\n${response.body}';
-      debugPrint('[COACH_KLIEN] $lastCoachClientsDebug');
+          'URL: $url\nPelatih ID Login: ${currentUser?.coach?.id ?? '-'}\nHTTP ${response.statusCode}:\n${response.body}';
+      debugPrint('[PELATIH_PESERTA] $lastCoachClientsDebug');
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as JsonMap;
@@ -1036,7 +1036,7 @@ class AuthService extends ChangeNotifier {
       }
     } catch (e) {
       lastCoachClientsDebug = 'Error koneksi: $e';
-      debugPrint('[COACH_KLIEN] $lastCoachClientsDebug');
+      debugPrint('[PELATIH_PESERTA] $lastCoachClientsDebug');
     }
     return [];
   }
@@ -1057,7 +1057,7 @@ class AuthService extends ChangeNotifier {
       final body = jsonDecode(response.body) as JsonMap;
       return AuthResult(
         isSuccess: response.statusCode == 200 && body['success'] == true,
-        message: body['message']?.toString() ?? 'Status klien diperbarui.',
+        message: body['message']?.toString() ?? 'Status peserta diperbarui.',
       );
     } catch (_) {
       return AuthResult(
@@ -1117,12 +1117,13 @@ class AuthService extends ChangeNotifier {
         }
         return AuthResult(
           isSuccess: true,
-          message: body['message']?.toString() ?? 'Profil Coach diperbarui!',
+          message: body['message']?.toString() ?? 'Profil Pelatih diperbarui!',
         );
       }
       return AuthResult(
         isSuccess: false,
-        message: _extractErrorMessage(body, 'Gagal memperbarui profil Coach.'),
+        message:
+            _extractErrorMessage(body, 'Gagal memperbarui profil Pelatih.'),
       );
     } catch (_) {
       return AuthResult(
@@ -1156,7 +1157,7 @@ class AuthService extends ChangeNotifier {
     } catch (_) {}
   }
 
-  // --- CRUD Rekomendasi Olahraga (Coach) ---
+  // --- CRUD Rekomendasi Olahraga (Pelatih) ---
   Future<List<JsonMap>> fetchCoachRekomendasiOlahraga({String? userId}) async {
     if (!isLoggedIn) return [];
     try {
@@ -1226,7 +1227,7 @@ class AuthService extends ChangeNotifier {
     return false;
   }
 
-  // --- CRUD Rekomendasi Makanan Diet (Coach) ---
+  // --- CRUD Rekomendasi Makanan Diet (Pelatih) ---
   Future<List<JsonMap>> fetchCoachRekomendasiMakanan({String? userId}) async {
     if (!isLoggedIn) return [];
     try {
@@ -1298,7 +1299,7 @@ class AuthService extends ChangeNotifier {
   }
 
   // =========================================================================
-  // 8. SISI USER: PILIH COACH & LIHAT REKOMENDASI MAKANAN DIET
+  // 8. SISI PESERTA: PILIH PELATIH, KONFIRMASI JADWAL & REKOMENDASI DIET
   // =========================================================================
   Future<List<JsonMap>> fetchAvailableCoaches() async {
     if (!isLoggedIn) return [];
@@ -1358,7 +1359,7 @@ class AuthService extends ChangeNotifier {
         isSuccess: (response.statusCode == 200 || response.statusCode == 201) &&
             body['success'] == true,
         message: body['message']?.toString() ??
-            'Permintaan pendampingan dikirim ke Coach.',
+            'Permintaan pendampingan dikirim ke Pelatih.',
       );
     } catch (_) {
       return AuthResult(
@@ -1391,5 +1392,64 @@ class AuthService extends ChangeNotifier {
       }
     } catch (_) {}
     return [];
+  }
+
+  Future<List<JsonMap>> fetchUserRekomendasiOlahraga() async {
+    if (!isLoggedIn) return [];
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/rekomendasi-coach'), headers: _jsonHeaders)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as JsonMap;
+        if (body['success'] == true && body['data'] is JsonMap) {
+          final data = body['data'] as JsonMap;
+          if (data['rekomendasi_olahraga'] is List) {
+            return List<JsonMap>.from(data['rekomendasi_olahraga'] as List);
+          }
+          if (data['olahraga'] is List) {
+            return List<JsonMap>.from(data['olahraga'] as List);
+          }
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<AuthResult> respondRekomendasiOlahraga({
+    required String rekomendasiId,
+    required String aksi, // 'accepted' | 'rejected'
+    String? catatan,
+  }) async {
+    final aksiServer = (aksi == 'accepted' || aksi == 'terima')
+        ? 'terima'
+        : 'tolak';
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/rekomendasi-olahraga/$rekomendasiId/respons'),
+            headers: _jsonHeaders,
+            body: jsonEncode({
+              'aksi': aksiServer,
+              if (catatan != null && catatan.trim().isNotEmpty)
+                'catatan_peserta': catatan.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      final body = jsonDecode(response.body) as JsonMap;
+      return AuthResult(
+        isSuccess: response.statusCode == 200 && body['success'] == true,
+        message: body['message']?.toString() ??
+            (aksiServer == 'terima'
+                ? 'Jadwal olahraga dari Pelatih berhasil diterima.'
+                : 'Jadwal olahraga dari Pelatih ditolak.'),
+      );
+    } catch (_) {
+      return AuthResult(
+        isSuccess: false,
+        message: 'Gagal terhubung ke server Laravel.',
+      );
+    }
   }
 }

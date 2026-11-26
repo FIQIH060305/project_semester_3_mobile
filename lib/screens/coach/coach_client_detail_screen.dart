@@ -45,8 +45,10 @@ class _CoachClientDetailScreenState extends State<CoachClientDetailScreen> {
     final aktivitas = (_detail?['riwayat_olahraga'] as List?) ?? [];
     final beratHistory = (_detail?['riwayat_berat'] as List?) ?? [];
 
-    final beratAwal =
-        profil['berat_awal'] ?? target['berat_awal'] ?? profil['berat_badan_awal'] ?? '-';
+    final beratAwal = profil['berat_awal'] ??
+        target['berat_awal'] ??
+        profil['berat_badan_awal'] ??
+        '-';
     final beratSekarang = profil['berat_sekarang'] ?? '-';
     final beratTarget = profil['berat_target'] ?? target['berat_target'] ?? '-';
 
@@ -69,9 +71,11 @@ class _CoachClientDetailScreenState extends State<CoachClientDetailScreen> {
           : RefreshIndicator(
               onRefresh: _loadDetail,
               child: ListView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
                 padding: const EdgeInsets.all(16),
                 children: [
-                  // Kartu Profil & Target Berat Klien
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -110,9 +114,8 @@ class _CoachClientDetailScreenState extends State<CoachClientDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
-
                   const Text(
-                    'Riwayat Aktivitas Olahraga Klien',
+                    'Riwayat Aktivitas Olahraga Peserta',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -121,14 +124,13 @@ class _CoachClientDetailScreenState extends State<CoachClientDetailScreen> {
                   ),
                   const SizedBox(height: 10),
                   if (aktivitas.isEmpty)
-                    _emptyBox('Klien belum memiliki riwayat olahraga.')
+                    _emptyBox('Peserta belum memiliki riwayat olahraga.')
                   else
                     ...aktivitas.take(10).map((a) {
                       final m = a as JsonMap;
-                      final rawTgl = (m['tanggal_waktu'] ??
-                              m['created_at'] ??
-                              '')
-                          .toString();
+                      final rawTgl =
+                          (m['tanggal_waktu'] ?? m['created_at'] ?? '')
+                              .toString();
                       final tglLabel = rawTgl.contains('T')
                           ? rawTgl.split('T').first
                           : rawTgl.split(' ').first;
@@ -169,7 +171,6 @@ class _CoachClientDetailScreenState extends State<CoachClientDetailScreen> {
                         ),
                       );
                     }),
-
                   const SizedBox(height: 18),
                   const Text(
                     'Catatan Berat Badan Terbaru',
@@ -185,12 +186,11 @@ class _CoachClientDetailScreenState extends State<CoachClientDetailScreen> {
                   else
                     ...beratHistory.take(7).map((b) {
                       final m = b as JsonMap;
-                      final tgl = (m['tanggal'] ??
-                              m['tanggal_pencatatan'] ??
-                              '-')
-                          .toString()
-                          .split('T')
-                          .first;
+                      final tgl =
+                          (m['tanggal'] ?? m['tanggal_pencatatan'] ?? '-')
+                              .toString()
+                              .split('T')
+                              .first;
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(

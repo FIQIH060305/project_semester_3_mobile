@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../models/jadwal_item.dart';
 import '../../services/auth_service.dart';
+import '../../services/jadwal_service.dart';
 
 class UserCoachScreen extends StatefulWidget {
   const UserCoachScreen({super.key});
@@ -12,6 +14,7 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
   bool _loading = true;
   JsonMap? _myCoach;
   List<JsonMap> _coaches = [];
+  List<JsonMap> _rekomOlahraga = [];
 
   @override
   void initState() {
@@ -24,29 +27,31 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
     final res = await Future.wait([
       AuthService.instance.fetchMyCoach(),
       AuthService.instance.fetchAvailableCoaches(),
+      AuthService.instance.fetchUserRekomendasiOlahraga(),
     ]);
     if (!mounted) return;
     setState(() {
       _myCoach = res[0] as JsonMap?;
       _coaches = (res[1] as List<JsonMap>?) ?? [];
+      _rekomOlahraga = (res[2] as List<JsonMap>?) ?? [];
       _loading = false;
     });
   }
 
-  Future<void> _ajukanCoach(String coachId, String namaCoach) async {
+  Future<void> _ajukanPelatih(String coachId, String namaPelatih) async {
     final catatanCtrl = TextEditingController();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Pilih Coach $namaCoach',
+        title: Text('Pilih Pelatih $namaPelatih',
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
         content: TextField(
           controller: catatanCtrl,
           maxLines: 3,
           decoration: InputDecoration(
             hintText:
-                'Tuliskan target atau kondisi kebugaranmu untuk Coach (opsional)...',
+                'Tuliskan target atau kondisi kebugaranmu untuk Pelatih (opsional)...',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
@@ -82,6 +87,73 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
     if (res.isSuccess) _loadData();
   }
 
+  Future<void> _konfirmasiRekomendasiJadwal(
+      JsonMap item, String aksi) async {
+    String? catatan;
+    if (aksi == 'rejected') {
+      final ctrl = TextEditingController();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Tolak Rekomendasi Jadwal',
+              style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800)),
+          content: TextField(
+            controller: ctrl,
+            maxLines: 2,
+            decoration: InputDecoration(
+              hintText: 'Tuliskan alasan penolakan untuk Pelatih...',
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Tolak Jadwal'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      catatan = ctrl.text;
+    }
+
+    final dummyItem = JadwalItem(
+      id: 'rekom_${item['id']}',
+      rekomendasiId: (item['id'] ?? '').toString(),
+      judul: (item['nama_olahraga'] ?? 'Latihan').toString(),
+      tanggal: DateTime.now(),
+      dariPelatih: true,
+    );
+
+    final res = await JadwalService.instance.respondRekomendasiPelatih(
+      item: dummyItem,
+      aksi: aksi,
+      catatan: catatan,
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(res.message),
+        backgroundColor:
+            res.isSuccess ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    if (res.isSuccess) _loadData();
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeCoach = _myCoach?['coach'] as JsonMap?;
@@ -93,7 +165,7 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
-          'Coach Pendamping Saya',
+          'Pelatih Pendamping Saya',
           style: TextStyle(
             color: Color(0xFF0F172A),
             fontSize: 18,
@@ -106,6 +178,9 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
           : RefreshIndicator(
               onRefresh: _loadData,
               child: ListView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
                 padding: const EdgeInsets.all(18),
                 children: [
                   if (activeCoach != null) ...[
@@ -124,7 +199,7 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text(
-                                'Coach Pendamping Kamu',
+                                'Pelatih Pendamping Kamu',
                                 style: TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12,
@@ -152,7 +227,7 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            (activeCoach['nama'] ?? 'Coach GERAK').toString(),
+                            (activeCoach['nama'] ?? 'Pelatih GERAK').toString(),
                             style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 19,
@@ -180,8 +255,139 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
                     const SizedBox(height: 20),
                   ],
 
+                  // Rekomendasi Jadwal Olahraga dari Pelatih
+                  if (_rekomOlahraga.isNotEmpty) ...[
+                    const Text(
+                      'Rekomendasi Jadwal dari Pelatih',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ..._rekomOlahraga.map((r) {
+                      final statusUser =
+                          (r['status_user'] ?? r['status'] ?? 'pending')
+                              .toString();
+                      final isPending = statusUser == 'pending';
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: isPending
+                                ? const Color(0xFF93C5FD)
+                                : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    (r['nama_olahraga'] ?? 'Latihan')
+                                        .toString(),
+                                    style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: statusUser == 'accepted'
+                                        ? const Color(0xFFDCFCE7)
+                                        : statusUser == 'rejected'
+                                            ? const Color(0xFFFEE2E2)
+                                            : const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    statusUser == 'accepted'
+                                        ? 'Diterima'
+                                        : statusUser == 'rejected'
+                                            ? 'Ditolak'
+                                            : 'Menunggu Konfirmasi',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: statusUser == 'accepted'
+                                          ? const Color(0xFF16A34A)
+                                          : statusUser == 'rejected'
+                                              ? const Color(0xFFDC2626)
+                                              : const Color(0xFFD97706),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Tanggal: ${r['tanggal'] ?? '-'} • Jam ${r['waktu'] ?? '07:00'} • ${r['durasi'] ?? 30} mnt (${r['intensitas'] ?? 'Sedang'})',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                            if (r['catatan'] != null &&
+                                r['catatan'].toString().isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                'Catatan Pelatih: "${r['catatan']}"',
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                    color: Color(0xFF475569)),
+                              ),
+                            ],
+                            if (isPending) ...[
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: () =>
+                                          _konfirmasiRekomendasiJadwal(
+                                              r, 'rejected'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor:
+                                            const Color(0xFFDC2626),
+                                      ),
+                                      child: const Text('Tolak Jadwal'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () =>
+                                          _konfirmasiRekomendasiJadwal(
+                                              r, 'accepted'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFF16A34A),
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: const Text('Terima Jadwal'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 12),
+                  ],
+
                   const Text(
-                    'Daftar Coach Terverifikasi',
+                    'Daftar Pelatih Terverifikasi',
                     style: TextStyle(
                       fontSize: 15.5,
                       fontWeight: FontWeight.w800,
@@ -191,12 +397,12 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
                   const SizedBox(height: 10),
 
                   if (_coaches.isEmpty)
-                    const Text('Belum ada Coach terverifikasi saat ini.',
+                    const Text('Belum ada Pelatih terverifikasi saat ini.',
                         style: TextStyle(color: Color(0xFF64748B)))
                   else
                     ..._coaches.map((c) {
                       final cid = (c['id'] ?? '').toString();
-                      final nama = (c['nama'] ?? 'Coach').toString();
+                      final nama = (c['nama'] ?? 'Pelatih').toString();
                       final isCurrent = activeCoach != null &&
                           activeCoach['id']?.toString() == cid;
 
@@ -259,7 +465,7 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
                               child: ElevatedButton(
                                 onPressed: isCurrent
                                     ? null
-                                    : () => _ajukanCoach(cid, nama),
+                                    : () => _ajukanPelatih(cid, nama),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF0066CC),
                                   foregroundColor: Colors.white,
@@ -269,8 +475,8 @@ class _UserCoachScreenState extends State<UserCoachScreen> {
                                 ),
                                 child: Text(
                                   isCurrent
-                                      ? 'Coach Terpilih'
-                                      : 'Pilih Coach Ini',
+                                      ? 'Pelatih Terpilih'
+                                      : 'Pilih Pelatih Ini',
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w800),
                                 ),

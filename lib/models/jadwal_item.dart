@@ -15,12 +15,16 @@ class JadwalItem {
   FrekuensiUlang frekuensi;
   String? parentId;
 
-  // Penanda khusus apabila jadwal diberikan oleh Coach
-  final bool dariCoach;
-  final String? namaCoach;
+  // Penanda khusus apabila jadwal diberikan oleh Pelatih
+  final bool dariPelatih;
+  final String? rekomendasiId;
+  final String? namaPelatih;
   final int? durasiMenit;
   final String? intensitas;
-  final String? catatanCoach;
+  final String? targetLatihan;
+  final String? catatanPelatih;
+  final String statusPersetujuan; // 'pending' | 'accepted' | 'rejected'
+  final String? alasanPenolakan;
 
   JadwalItem({
     required this.id,
@@ -30,12 +34,22 @@ class JadwalItem {
     this.ulangi = false,
     this.frekuensi = FrekuensiUlang.tidakUlang,
     this.parentId,
-    this.dariCoach = false,
-    this.namaCoach,
+    this.dariPelatih = false,
+    this.rekomendasiId,
+    this.namaPelatih,
     this.durasiMenit,
     this.intensitas,
-    this.catatanCoach,
+    this.targetLatihan,
+    this.catatanPelatih,
+    this.statusPersetujuan = 'accepted',
+    this.alasanPenolakan,
   });
+
+  bool get menungguKonfirmasi =>
+      dariPelatih && statusPersetujuan == 'pending';
+
+  bool get ditolakPeserta =>
+      dariPelatih && statusPersetujuan == 'rejected';
 
   String get kategoriWaktu {
     final now = DateTime.now();
@@ -51,6 +65,8 @@ class JadwalItem {
   }
 
   String get labelBadge {
+    if (menungguKonfirmasi) return 'Perlu Konfirmasi';
+    if (ditolakPeserta) return 'Ditolak';
     if (selesai) return 'Tuntas';
     if (kategoriWaktu == 'Terlambat') return 'Terlewat';
     if (kategoriWaktu == 'Hari ini') return 'Hari ini';
@@ -59,6 +75,9 @@ class JadwalItem {
   }
 
   String? get infoTargetLatihan {
+    if (targetLatihan != null && targetLatihan!.trim().isNotEmpty) {
+      return targetLatihan!.trim();
+    }
     if (durasiMenit != null && durasiMenit! > 0) {
       return '$durasiMenit menit';
     }
@@ -96,11 +115,15 @@ class JadwalItem {
       ulangi: ulangi,
       frekuensi: frekuensi,
       parentId: parentId ?? id,
-      dariCoach: dariCoach,
-      namaCoach: namaCoach,
+      dariPelatih: dariPelatih,
+      rekomendasiId: rekomendasiId,
+      namaPelatih: namaPelatih,
       durasiMenit: durasiMenit,
       intensitas: intensitas,
-      catatanCoach: catatanCoach,
+      targetLatihan: targetLatihan,
+      catatanPelatih: catatanPelatih,
+      statusPersetujuan: statusPersetujuan,
+      alasanPenolakan: alasanPenolakan,
     );
   }
 
@@ -112,11 +135,15 @@ class JadwalItem {
     bool? ulangi,
     FrekuensiUlang? frekuensi,
     String? parentId,
-    bool? dariCoach,
-    String? namaCoach,
+    bool? dariPelatih,
+    String? rekomendasiId,
+    String? namaPelatih,
     int? durasiMenit,
     String? intensitas,
-    String? catatanCoach,
+    String? targetLatihan,
+    String? catatanPelatih,
+    String? statusPersetujuan,
+    String? alasanPenolakan,
   }) {
     return JadwalItem(
       id: id ?? this.id,
@@ -126,11 +153,15 @@ class JadwalItem {
       ulangi: ulangi ?? this.ulangi,
       frekuensi: frekuensi ?? this.frekuensi,
       parentId: parentId ?? this.parentId,
-      dariCoach: dariCoach ?? this.dariCoach,
-      namaCoach: namaCoach ?? this.namaCoach,
+      dariPelatih: dariPelatih ?? this.dariPelatih,
+      rekomendasiId: rekomendasiId ?? this.rekomendasiId,
+      namaPelatih: namaPelatih ?? this.namaPelatih,
       durasiMenit: durasiMenit ?? this.durasiMenit,
       intensitas: intensitas ?? this.intensitas,
-      catatanCoach: catatanCoach ?? this.catatanCoach,
+      targetLatihan: targetLatihan ?? this.targetLatihan,
+      catatanPelatih: catatanPelatih ?? this.catatanPelatih,
+      statusPersetujuan: statusPersetujuan ?? this.statusPersetujuan,
+      alasanPenolakan: alasanPenolakan ?? this.alasanPenolakan,
     );
   }
 
@@ -143,11 +174,15 @@ class JadwalItem {
       'ulangi': ulangi,
       'frekuensi': frekuensi.index,
       'parentId': parentId,
-      'dariCoach': dariCoach,
-      'namaCoach': namaCoach,
+      'dariPelatih': dariPelatih,
+      'rekomendasiId': rekomendasiId,
+      'namaPelatih': namaPelatih,
       'durasiMenit': durasiMenit,
       'intensitas': intensitas,
-      'catatanCoach': catatanCoach,
+      'targetLatihan': targetLatihan,
+      'catatanPelatih': catatanPelatih,
+      'statusPersetujuan': statusPersetujuan,
+      'alasanPenolakan': alasanPenolakan,
     };
   }
 
@@ -160,11 +195,18 @@ class JadwalItem {
       ulangi: json['ulangi'] as bool? ?? false,
       frekuensi: FrekuensiUlang.values[json['frekuensi'] as int? ?? 0],
       parentId: json['parentId'] as String?,
-      dariCoach: json['dariCoach'] as bool? ?? false,
-      namaCoach: json['namaCoach'] as String?,
+      dariPelatih:
+          (json['dariPelatih'] ?? json['dariCoach']) as bool? ?? false,
+      rekomendasiId: json['rekomendasiId'] as String?,
+      namaPelatih: (json['namaPelatih'] ?? json['namaCoach']) as String?,
       durasiMenit: json['durasiMenit'] as int?,
       intensitas: json['intensitas'] as String?,
-      catatanCoach: json['catatanCoach'] as String?,
+      targetLatihan: json['targetLatihan'] as String?,
+      catatanPelatih:
+          (json['catatanPelatih'] ?? json['catatanCoach']) as String?,
+      statusPersetujuan:
+          (json['statusPersetujuan'] ?? 'accepted').toString(),
+      alasanPenolakan: json['alasanPenolakan'] as String?,
     );
   }
 
